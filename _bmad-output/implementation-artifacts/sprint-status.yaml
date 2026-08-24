@@ -1,0 +1,99 @@
+# generated: 2026-08-24
+# last_updated: 2026-08-24
+# project: LAgent
+# project_key: NOKEY
+# tracking_system: file-system
+# story_location: {project-root}/_bmad-output/implementation-artifacts
+
+# STATUS DEFINITIONS:
+# ==================
+# Epic Status:
+#   - backlog: Epic not yet started
+#   - in-progress: Epic actively being worked on
+#   - done: All stories in epic completed
+#
+# Epic Status Transitions:
+#   - backlog -> in-progress: Automatically when first story is created (via create-story)
+#   - in-progress -> done: Manually when all stories reach 'done' status
+#
+# Story Status:
+#   - backlog: Story only exists in epic file
+#   - ready-for-dev: Story file created in stories folder
+#   - in-progress: Developer actively working on implementation
+#   - review: Ready for code review (via Dev's code-review workflow)
+#   - done: Story completed
+#
+# Retrospective Status:
+#   - optional: Can be completed but not required
+#   - done: Retrospective has been completed
+#
+# Action Item Status:
+#   - open: Committed during a retrospective, not yet addressed
+#   - in-progress: Actively being worked on
+#   - done: Completed
+#
+# WORKFLOW NOTES:
+# ===============
+# - Epic transitions to 'in-progress' automatically when first story is created
+# - Stories can be worked in parallel if team capacity allows
+# - Developer typically creates next story after previous one is 'done' to incorporate learnings
+# - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
+# - Retrospective appends its action items to action_items; sprint-status surfaces open ones
+
+generated: 2026-08-24
+last_updated: 2026-08-24
+project: LAgent
+project_key: NOKEY
+tracking_system: file-system
+story_location: "{project-root}/_bmad-output/implementation-artifacts"
+
+development_status:
+  epic-1: in-progress
+  1-1-project-scaffold-lagent-common-shared-types: ready-for-dev
+  1-2-yaml-agent-profile-loader-validation: review
+  1-3-session-database-wal-sqlite-setup: ready-for-dev
+  1-4-zeromq-channel-wiring-process-startup-handshake: backlog
+  epic-1-retrospective: optional
+  epic-2: backlog
+  2-1-screen-capture-thread-dxcam-primary-mss-fallback: backlog
+  2-2-roi-extraction-from-agent-profile: backlog
+  2-3-gpu-inference-server-yolo-detection-common-class-models: backlog
+  2-4-easyocr-integration-hp-mp-buff-numeric-values: backlog
+  2-5-inference-client-policyqueue-debug-perception-display: backlog
+  epic-2-retrospective: optional
+  epic-3: backlog
+  3-1-bezier-mouse-path-generator: backlog
+  3-2-keystroke-timing-noise: backlog
+  3-3-fatigue-model: backlog
+  3-4-micro-drift-error-injection: backlog
+  3-5-shadow-mode-full-hsl-shaping-without-os-output: backlog
+  epic-3-retrospective: optional
+  epic-4: backlog
+  4-1-agent-base-loop-capture-to-policy-single-window-pipeline: backlog
+  4-2-character-identification-on-startup: backlog
+  4-3-fishing-fsm-cast-and-wait-states: backlog
+  4-4-fishing-fsm-tension-detection-and-reel-phase-1-gate-complete: backlog
+  epic-4-retrospective: optional
+  epic-5: backlog
+  5-1-party-bus-partystate-pub-sub-exchange: backlog
+  5-2-pp-buff-safety-check: backlog
+  5-3-orchestrator-heartbeat-monitor-session-halt: backlog
+  epic-5-retrospective: optional
+  epic-6: backlog
+  6-1-warlord-combat-fsm-pull-fight-loot: backlog
+  6-2-prophet-buff-cycle-fsm-timer-driven-buffing: backlog
+  6-3-death-detection-full-party-recovery: backlog
+  6-4-inventory-full-detection-town-return: backlog
+  6-5-session-cap-clean-shutdown: backlog
+  epic-6-retrospective: optional
+  epic-7: backlog
+  7-1-recording-mode-dual-write-frame-capture-input-log: backlog
+  7-2-auto-prelabeling-pipeline: backlog
+  7-3-model-training-atomic-deployment: backlog
+  7-4-youtube-frame-ingestion: backlog
+  epic-7-retrospective: optional
+  epic-8: backlog
+  8-1-system-tray-icon-session-control-menu: backlog
+  8-2-status-overlay-window: backlog
+  8-3-session-state-wiring-tray-feedback: backlog
+  epic-8-retrospective: optional

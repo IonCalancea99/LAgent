@@ -1,0 +1,17 @@
+name: prophet
+roi_positions:
+  health_bar: [100, 20, 300, 40]
+  mana_bar: [100, 45, 300, 65]
+fsm_bindings:
+  idle: {next: buffing}
+  buffing: {next: following}
+skill_key_bindings:
+  heal: "1"
+  buff: "2"
+buff_timer_durations:
+  haste: 300.0
+confidence_thresholds:
+  default: 0.6
+confidence_threshold: 0.6
+enable_ocr: true
+enable_recording: false
