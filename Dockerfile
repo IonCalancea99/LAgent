@@ -17,6 +17,7 @@ RUN pip install --no-cache-dir \
         "pydantic>=2.11.0,<3.0.0" \
         "PyYAML>=6.0.1,<7.0.0" \
         "pyzmq>=26.0.0,<27.0.0" \
+        "easyocr>=1.7.0,<2.0.0" \
         "structlog>=24.0.0,<25.0.0" \
         "pytest>=7.4.0" \
     && pip install --no-cache-dir --no-deps -e .

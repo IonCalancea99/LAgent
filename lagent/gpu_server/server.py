@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import logging
+import re
 import threading
 import time
 from pathlib import Path
@@ -31,6 +32,87 @@ def _box_iou(first: tuple[int, int, int, int], second: tuple[int, int, int, int]
     return intersection / union if union else 0.0
 
 
+class OcrInference:
+    """Run EasyOCR against named ROI crops on the selected inference device."""
+
+    def __init__(self, reader: Any | None = None, device: str | None = None) -> None:
+        self.device = device or self._available_device()
+        logger.info("OCR device: %s", self.device)
+        self.reader = reader
+
+    @staticmethod
+    def _available_device() -> str:
+        try:
+            import torch
+        except ImportError:
+            return "cpu"
+        return "cuda" if torch.cuda.is_available() else "cpu"
+
+    def _load_reader(self) -> Any:
+        try:
+            import easyocr
+        except ImportError as exc:
+            raise RuntimeError("easyocr is required when OCR is enabled") from exc
+        return easyocr.Reader(["en"], gpu=self.device == "cuda")
+
+    @staticmethod
+    def _text(results: Any) -> str:
+        parts = []
+        for result in results or []:
+            value = result[1] if isinstance(result, (list, tuple)) and len(result) > 1 else result
+            parts.append(str(value))
+        return " ".join(parts)
+
+    @staticmethod
+    def _normalize(text: str) -> str:
+        return re.sub(r"[^0-9%:/.]", "", text)
+
+    @staticmethod
+    def _valid_crop(crop: Any) -> bool:
+        if not isinstance(crop, bytes):
+            return True
+        try:
+            from PIL import Image
+
+            Image.open(io.BytesIO(crop)).verify()
+        except (ImportError, OSError):
+            return False
+        return True
+
+    def read(self, roi_map: dict[str, Any]) -> dict[str, str]:
+        values: dict[str, str] = {}
+        if self.reader is None:
+            try:
+                self.reader = self._load_reader()
+            except RuntimeError as exc:
+                logger.warning("OCR unavailable; continuing without OCR: %s", exc)
+                return values
+        started = time.perf_counter()
+        aliases = {"health_bar": "hp", "mana_bar": "mp"}
+        for region, crop in roi_map.items():
+            key = aliases.get(region, region)
+            if region not in aliases and region not in {"hp", "mp"} and not key.startswith("buff_"):
+                continue
+            if not self._valid_crop(crop):
+                logger.warning("OCR skipped invalid crop for region=%s", region)
+                continue
+            try:
+                result = self.reader.readtext(crop, detail=1, allowlist="0123456789%:/.")
+            except Exception as exc:
+                logger.warning("OCR failed for region=%s: %s", region, exc)
+                continue
+            normalized = self._normalize(self._text(result))
+            if not normalized:
+                logger.warning("OCR returned no numeric value for region=%s", region)
+                continue
+            if set(normalized) <= {"0", "%", ":", "/", "."}:
+                logger.warning("OCR returned an all-zero value for region=%s: %s", region, normalized)
+            values[key] = normalized
+        latency_ms = (time.perf_counter() - started) * 1000
+        logger.info("OCR inference latency_ms=%.2f", latency_ms)
+        return values
+
+
 class YoloInference:
     """Run the common model and the requesting agent's class model."""
 
@@ -42,6 +124,7 @@ class YoloInference:
         thresholds: dict[str, float] | None = None,
         model_loader: Callable[[str], Any] | None = None,
         nms_iou_threshold: float = 0.5,
+        ocr: OcrInference | None = None,
     ) -> None:
         self.confidence_threshold = confidence_threshold
         self.thresholds = thresholds or {}
@@ -49,6 +132,7 @@ class YoloInference:
         self.models = dict(models or {})
         self.model_root = Path(model_root)
         self._model_loader = model_loader or self._load_yolo_model
+        self.ocr = ocr
         self._load_available_models()
 
     @staticmethod
@@ -96,7 +180,7 @@ class YoloInference:
                 kept.append(detection)
         return kept
 
-    def detect(self, frame: Any, agent_id: str) -> PerceptionResult:
+    def detect(self, frame: Any, agent_id: str, roi_map: dict[str, Any] | None = None) -> PerceptionResult:
         if isinstance(frame, bytes):
             try:
                 from PIL import Image
@@ -112,7 +196,8 @@ class YoloInference:
             outputs = model(frame, conf=self._threshold(family), verbose=False)
             for output in outputs:
                 detections.extend(self._detections_from_result(output, family))
-        return PerceptionResult(detections=detections)
+        ocr_values = self.ocr.read(roi_map or {}) if self.ocr is not None else {}
+        return PerceptionResult(detections=detections, ocr_values=ocr_values)
 
 
 class GpuInferenceServer:
@@ -129,7 +214,7 @@ class GpuInferenceServer:
         self.endpoint = endpoint
         self.socket = self.context.socket(zmq.ROUTER)
         self.socket.bind(endpoint)
-        self.inference = inference or YoloInference()
+        self.inference = inference or YoloInference(ocr=OcrInference())
         self._stopped = threading.Event()
 
     def serve(self, once: bool = False) -> None:
@@ -147,7 +232,9 @@ class GpuInferenceServer:
                         logger.warning("Ignoring inference request without a valid agent_id")
                         continue
                     started = time.perf_counter()
-                    result = self.inference.detect(request.get("frame_bytes", b""), agent_id)
+                    result = self.inference.detect(
+                        request.get("frame_bytes", b""), agent_id, request.get("roi_map", {})
+                    )
                     latency_ms = (time.perf_counter() - started) * 1000
                     logger.info("YOLO inference agent=%s latency_ms=%.2f", agent_id, latency_ms)
                     self.socket.send_multipart([identity, encode({
