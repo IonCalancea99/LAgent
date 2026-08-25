@@ -2,7 +2,7 @@
 storyId: 2.2
 epic: "Epic 2: Perception Pipeline"
 title: "ROI Extraction from Agent Profile"
-status: ready
+status: review
 ---
 
 # Story 2.2: ROI Extraction from Agent Profile
@@ -42,3 +42,8 @@ So that downstream detection runs only on relevant screen regions and ROI positi
 ## Notes
 
 ROI extraction should be fast and happen inline with the capture thread. The ROI map is passed downstream to the GPU Inference Server as a dict of {roi_name: cropped_pixels}. All coordinates must be validated before the first frame capture to fail fast per FR-7 (Fail-fast config loading).
+
+## Review Notes (2026-08-25)
+
+- The crop and bounds helpers have focused tests, but the Agent startup path does not currently call ROI validation with the bound window dimensions.
+- Keep this story in review until startup passes the actual capture dimensions to `validate_roi_positions`; a helper-only check does not satisfy the fail-fast acceptance criterion.

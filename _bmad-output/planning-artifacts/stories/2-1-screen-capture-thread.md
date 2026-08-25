@@ -2,7 +2,7 @@
 storyId: 2.1
 epic: "Epic 2: Perception Pipeline"
 title: "Screen Capture Thread — dxcam Primary, mss Fallback"
-status: ready
+status: review
 ---
 
 # Story 2.1: Screen Capture Thread — dxcam Primary, mss Fallback
@@ -42,3 +42,9 @@ So that frames are available for the inference pipeline within 10 ms of capture 
 ## Notes
 
 The capture thread must never block downstream inference stages. The 10 FPS rate is sufficient for Lineage 2's ≥500 ms skill cast times. Timestamps must be captured at frame-grab time, not queue insertion time.
+
+## Review Notes (2026-08-25)
+
+- The queue and dxcam selection are covered by focused tests.
+- Before marking this story done, verify the mss fallback supplies a real monitor rectangle for the bound window. An mss `grab` call cannot use a window-title mapping as a monitor region on its own.
+- Add a Windows smoke check for actual frame capture and the capture-to-queue latency requirement; the current tests use fakes and do not establish the 10 ms target.

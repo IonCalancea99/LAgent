@@ -2,7 +2,7 @@
 storyId: 2.4
 epic: "Epic 2: Perception Pipeline"
 title: "EasyOCR Integration — HP/MP/Buff Numeric Values"
-status: ready
+status: review
 ---
 
 # Story 2.4: EasyOCR Integration — HP/MP/Buff Numeric Values
@@ -43,3 +43,8 @@ So that Agents have current numeric HP%, MP%, and buff counts in their GameState
 ## Notes
 
 OCR latency should be tracked separately from YOLO to identify bottlenecks. Buff timers may be formatted as "12:34" (minutes:seconds) or numeric counts; parser should handle both. Invalid OCR reads (e.g., all zeros on a blank region) should be logged but not cause errors. OCR results should be included in PerceptionResult alongside Detection list so FSM policy can make decisions based on HP%, MP%, and active buffs. EasyOCR should run on the same GPU as YOLO inference.
+
+## Review Notes (2026-08-25)
+
+- Numeric normalization, device logging, CPU fallback, and ROI forwarding have focused fake-reader coverage.
+- Keep this story in review until a dependency-backed check confirms EasyOCR initializes and runs on the selected CUDA/CPU device. The current environment lacks the optional runtime dependencies, so the hardware/device acceptance criteria remain unverified.

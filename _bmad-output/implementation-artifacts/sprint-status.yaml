@@ -41,25 +41,25 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-24
-last_updated: 2026-08-24
+last_updated: 2026-08-25
 project: LAgent
 project_key: NOKEY
 tracking_system: file-system
 story_location: "{project-root}/_bmad-output/implementation-artifacts"
 
 development_status:
-  epic-1: in-progress
+  epic-1: done
   1-1-project-scaffold-lagent-common-shared-types: done
   1-2-yaml-agent-profile-loader-validation: done
   1-3-session-database-wal-sqlite-setup: done
   1-4-zeromq-channel-wiring-process-startup-handshake: done
   epic-1-retrospective: optional
-  epic-2: backlog
-  2-1-screen-capture-thread-dxcam-primary-mss-fallback: backlog
-  2-2-roi-extraction-from-agent-profile: backlog
-  2-3-gpu-inference-server-yolo-detection-common-class-models: backlog
-  2-4-easyocr-integration-hp-mp-buff-numeric-values: backlog
-  2-5-inference-client-policyqueue-debug-perception-display: backlog
+  epic-2: in-progress
+  2-1-screen-capture-thread-dxcam-primary-mss-fallback: review
+  2-2-roi-extraction-from-agent-profile: review
+  2-3-gpu-inference-server-yolo-detection-common-class-models: review
+  2-4-easyocr-integration-hp-mp-buff-numeric-values: review
+  2-5-inference-client-policyqueue-debug-perception-display: review
   epic-2-retrospective: optional
   epic-3: backlog
   3-1-bezier-mouse-path-generator: backlog

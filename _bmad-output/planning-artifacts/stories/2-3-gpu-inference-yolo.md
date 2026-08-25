@@ -2,7 +2,7 @@
 storyId: 2.3
 epic: "Epic 2: Perception Pipeline"
 title: "GPU Inference Server — YOLO Detection (Common + Class Models)"
-status: ready
+status: review
 ---
 
 # Story 2.3: GPU Inference Server — YOLO Detection (Common + Class Models)
@@ -45,3 +45,9 @@ So that both agents get class-agnostic and class-specific detections within the 
 ## Notes
 
 The Common Model runs on all frames regardless of class; Class Model is class-specific (loaded per agent type). Inference timing must be logged per frame to catch GPU saturation early. Box coordinates must use pixel-space origin (top-left = (0,0)) as per AD-10b. Non-maximum suppression (NMS) should be applied before merging to reduce duplicates.
+
+## Review Notes (2026-08-25)
+
+- Model merging, confidence filtering, routing, and latency logging have focused fake-model coverage.
+- Before marking this story done, benchmark both loaded YOLOv8-nano models on the target Windows hardware. The current tests only measure fake inference and cannot establish the 100 ms GTX 1070 Ti requirement.
+- Apply the documented NMS policy to the merged detection set, or explicitly document why per-model NMS is sufficient; the current implementation suppresses duplicates separately within each model family.

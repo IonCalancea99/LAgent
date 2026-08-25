@@ -2,10 +2,14 @@
 
 import argparse
 import logging
+import time
 import uuid
 from pathlib import Path
 
+from lagent.agent.capture import CaptureThread
+from lagent.agent.inference import InferenceClient, PolicyQueue
 from lagent.agent.profile import load_profile
+from lagent.common.transport import GPU_ENDPOINT
 from lagent.common.sessions_db import SessionsDB
 
 
@@ -23,6 +27,10 @@ def main() -> None:
         default=None,
         help="Session ID (auto-generated if not provided)",
     )
+    parser.add_argument("--debug", action="store_true", help="Run the live capture and inference debug pipeline")
+    parser.add_argument("--window-title", default="Lineage II", help="Game window title to capture")
+    parser.add_argument("--gpu-endpoint", default=GPU_ENDPOINT, help="GPU inference server endpoint")
+    parser.add_argument("--fps", type=int, default=10, help="Capture and inference rate")
     args = parser.parse_args()
 
     # Setup logging
@@ -62,6 +70,31 @@ def main() -> None:
         )
         
         db.close()
+
+        if args.debug:
+            capture = CaptureThread(args.window_title, fps=args.fps)
+            policy_queue = PolicyQueue(maxsize=2)
+            inference = InferenceClient(
+                args.profile_class,
+                capture.frame_queue,
+                policy_queue,
+                endpoint=args.gpu_endpoint,
+                profile=profile,
+                debug=True,
+            )
+            capture.start()
+            inference.start()
+            logger.info("Debug perception pipeline started for %s", args.window_title)
+            try:
+                while capture.is_alive() and inference.is_alive():
+                    time.sleep(0.25)
+            except KeyboardInterrupt:
+                logger.info("Stopping debug perception pipeline")
+            finally:
+                capture.stop()
+                inference.stop()
+                capture.join(timeout=1.0)
+                inference.join(timeout=1.0)
         
     except Exception as e:
         logger.error("Failed to initialize sessions database: %s", e)

@@ -2,7 +2,7 @@
 storyId: 2.5
 epic: "Epic 2: Perception Pipeline"
 title: "Inference Client, PolicyQueue & Debug Perception Display"
-status: ready
+status: review
 ---
 
 # Story 2.5: Inference Client, PolicyQueue & Debug Perception Display
@@ -45,3 +45,36 @@ So that I can visually verify the full capture → inference → result pipeline
 ## Notes
 
 The Inference Client runs in a separate thread from the capture thread. It must not block the capture thread if the GPU Server is slow or unavailable. PolicyQueue must use oldest-result eviction (not frame-eviction) since results are more expensive to regenerate. Debug output should include per-tick latency measurements (capture→send, GPU processing, recv→push). The inference loop should run continuously at the frame rate; if no frame is available, a skip is logged but the loop continues.
+
+## Tasks / Subtasks
+
+- [x] Implement bounded `PolicyQueue` with oldest-result eviction.
+- [x] Implement threaded `InferenceClient` with frame serialization, ROI forwarding, timeout handling, and debug output.
+- [x] Wire `--debug` capture and inference startup and graceful shutdown into the Agent entry point.
+- [x] Add focused tests for successful results, queue eviction, and GPU timeout handling.
+
+## Dev Agent Record
+
+### Implementation Plan
+
+- Keep capture and inference in separate daemon threads so GPU latency cannot block frame production.
+- Reuse `AgentTransport` for DEALER/ROUTER communication and `extract_roi_map` for profile-defined OCR crops.
+- Use a queue subclass with nonblocking oldest-result eviction to preserve the newest perception state.
+
+### Completion Notes
+
+- Added `PolicyQueue`, `InferenceClient`, and PNG/bytes frame serialization in `lagent/agent/inference.py`.
+- Added `--debug`, `--window-title`, `--gpu-endpoint`, and `--fps` pipeline startup options to the Agent entry point.
+- Debug output includes detections, OCR values, and capture/send, GPU, and receive/push latency measurements.
+- Focused validation passes: 3 tests passed; package compilation and diagnostics pass.
+- Full perception validation is blocked for two pre-existing integration tests because the active `.venv` lacks `pyzmq`.
+
+### File List
+
+- `lagent/agent/inference.py`
+- `lagent/agent/__main__.py`
+- `tests/test_story_2_5_inference_client.py`
+
+## Change Log
+
+- 2026-08-25: Implemented the capture-to-perception inference client, bounded policy queue, debug CLI pipeline, and focused tests.

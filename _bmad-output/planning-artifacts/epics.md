@@ -250,9 +250,9 @@ So that I can verify inter-process wiring is correct before any real logic is ad
 
 ---
 
-## Epic 2: Perception Pipeline
+### Epic 2: Perception Pipeline
 
-Ion can run a single Agent window in debug mode and see real-time YOLO detections and OCR values for a live game frame. The full capture → GPU inference → PerceptionResult path works at target latency.
+Ion can run a single Agent window in debug mode and see real-time YOLO detections and OCR values for a live game frame. Stories 2.1–2.4 provide the capture, ROI, model, and OCR components; Story 2.5 must connect them into the full capture → GPU inference → PerceptionResult path and verify target latency.
 
 ### Story 2.1: Screen Capture Thread — dxcam Primary, mss Fallback
 

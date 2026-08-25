@@ -6,6 +6,7 @@ from lagent.agent.profile import (
     load_profile,
     validate_roi_positions,
 )
+from lagent.agent.inference import InferenceClient, PolicyQueue, frame_to_bytes
 
 
 def main() -> None:
@@ -14,4 +15,12 @@ def main() -> None:
 
 	run_agent()
 
-__all__ = ["ProfileValidationError", "load_profile", "validate_roi_positions", "extract_roi_map"]
+__all__ = [
+    "InferenceClient",
+    "PolicyQueue",
+    "ProfileValidationError",
+    "extract_roi_map",
+    "frame_to_bytes",
+    "load_profile",
+    "validate_roi_positions",
+]
