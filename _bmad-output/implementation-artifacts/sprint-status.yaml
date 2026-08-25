@@ -61,8 +61,8 @@ development_status:
   2-4-easyocr-integration-hp-mp-buff-numeric-values: review
   2-5-inference-client-policyqueue-debug-perception-display: review
   epic-2-retrospective: optional
-  epic-3: backlog
-  3-1-bezier-mouse-path-generator: backlog
+  epic-3: in-progress
+  3-1-bezier-mouse-path-generator: done
   3-2-keystroke-timing-noise: backlog
   3-3-fatigue-model: backlog
   3-4-micro-drift-error-injection: backlog

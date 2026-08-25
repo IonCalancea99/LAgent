@@ -2,7 +2,7 @@
 storyId: 3.1
 epic: "Epic 3: Human Simulation Layer & Shadow Mode"
 title: "Bezier Mouse Path Generator"
-status: ready
+status: done
 ---
 
 # Story 3.1: Bezier Mouse Path Generator

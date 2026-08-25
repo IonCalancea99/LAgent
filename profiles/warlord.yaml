@@ -13,5 +13,6 @@ buff_timer_durations:
 confidence_thresholds:
   default: 0.6
 confidence_threshold: 0.6
+bezier_offset_range: [15, 30]
 enable_ocr: true
 enable_recording: false

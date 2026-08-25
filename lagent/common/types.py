@@ -131,10 +131,21 @@ class AgentProfile(BaseModel):
         default=0.5, ge=0.0, le=1.0,
         description="Minimum detection confidence"
     )
+
+    # Human simulation settings
+    bezier_offset_range: Tuple[int, int] = Field(
+        default=(15, 30),
+        description="Minimum and maximum absolute cubic Bezier control-point offset in pixels",
+    )
     
     # Mode flags
     enable_ocr: bool = Field(default=True, description="Enable OCR processing")
     enable_recording: bool = Field(default=False, description="Enable recording (reserved)")
+
+    @property
+    def bezier_offsets(self) -> Tuple[int, int]:
+        """Backward-compatible plural access for path generator callers."""
+        return self.bezier_offset_range
 
     @property
     def rois(self) -> Dict[str, Tuple[int, int, int, int]]:
