@@ -1,6 +1,6 @@
 # Story 1.1: Project Scaffold & lagent.common Shared Types
 
-Status: ready-for-dev
+Status: done
 
 ## Story
 
@@ -146,7 +146,26 @@ GitHub Copilot (Amelia / bmad-agent-dev)
 ### Completion Notes List
 
 - Ultimate context engine analysis completed - comprehensive developer guide created.
+- All six Pydantic v2 shared types implemented in `lagent/common/types.py` and exported via `lagent/common/__init__.py`.
+- All structural seed directories, package initializers, and entry-point stubs created.
+- pyproject.toml baseline declared.
+- 31 tests pass: import smoke, model construction/serialization, subprocess entry points, AD-12 export guard.
+- Code review 2026-08-24: all ACs verified, status advanced to done.
 
 ### File List
 
 - `_bmad-output/implementation-artifacts/1-1-project-scaffold-lagent-common-shared-types.md`
+- `pyproject.toml`
+- `lagent/common/__init__.py`
+- `lagent/common/types.py`
+- `lagent/agent/__init__.py`
+- `lagent/agent/__main__.py`
+- `lagent/gpu_server/__init__.py`
+- `lagent/gpu_server/__main__.py`
+- `lagent/orchestrator/__init__.py`
+- `lagent/orchestrator/__main__.py`
+- `lagent/ui/__init__.py`
+- `lagent/ui/__main__.py`
+- `lagent/hsl/__init__.py`
+- `lagent/train/__init__.py`
+- `tests/test_story_1_1_scaffold.py`

@@ -1,6 +1,11 @@
 """lagent.agent - decision engine and behavior orchestration."""
 
-from lagent.agent.profile import ProfileValidationError, load_profile
+from lagent.agent.profile import (
+    ProfileValidationError,
+    extract_roi_map,
+    load_profile,
+    validate_roi_positions,
+)
 
 
 def main() -> None:
@@ -9,4 +14,4 @@ def main() -> None:
 
 	run_agent()
 
-__all__ = ["ProfileValidationError", "load_profile"]
+__all__ = ["ProfileValidationError", "load_profile", "validate_roi_positions", "extract_roi_map"]

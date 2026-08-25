@@ -49,10 +49,10 @@ story_location: "{project-root}/_bmad-output/implementation-artifacts"
 
 development_status:
   epic-1: in-progress
-  1-1-project-scaffold-lagent-common-shared-types: ready-for-dev
-  1-2-yaml-agent-profile-loader-validation: review
-  1-3-session-database-wal-sqlite-setup: ready-for-dev
-  1-4-zeromq-channel-wiring-process-startup-handshake: backlog
+  1-1-project-scaffold-lagent-common-shared-types: done
+  1-2-yaml-agent-profile-loader-validation: done
+  1-3-session-database-wal-sqlite-setup: done
+  1-4-zeromq-channel-wiring-process-startup-handshake: done
   epic-1-retrospective: optional
   epic-2: backlog
   2-1-screen-capture-thread-dxcam-primary-mss-fallback: backlog
