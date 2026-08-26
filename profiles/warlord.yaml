@@ -14,5 +14,9 @@ confidence_thresholds:
   default: 0.6
 confidence_threshold: 0.6
 bezier_offset_range: [15, 30]
+skill_timing:
+  default: {mean: 0.18, std: 0.05}
+  attack: {mean: 0.16, std: 0.04}
+  assist: {mean: 0.18, std: 0.05}
 enable_ocr: true
 enable_recording: false

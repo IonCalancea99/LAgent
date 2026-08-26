@@ -137,6 +137,15 @@ class AgentProfile(BaseModel):
         default=(15, 30),
         description="Minimum and maximum absolute cubic Bezier control-point offset in pixels",
     )
+    skill_timing: Dict[str, Dict[str, float]] = Field(
+        default_factory=lambda: {
+            "default": {"mean": 0.18, "std": 0.05},
+            "heal": {"mean": 0.20, "std": 0.06},
+            "buff": {"mean": 0.22, "std": 0.07},
+            "attack": {"mean": 0.16, "std": 0.04},
+        },
+        description="Per-skill Gaussian keystroke timing parameters keyed by skill name with mean/std in seconds",
+    )
     
     # Mode flags
     enable_ocr: bool = Field(default=True, description="Enable OCR processing")

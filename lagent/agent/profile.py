@@ -17,6 +17,7 @@ REQUIRED_PROFILE_FIELDS = (
     "skill_key_bindings",
     "buff_timer_durations",
     "confidence_thresholds",
+    "skill_timing",
 )
 
 

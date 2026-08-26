@@ -17,6 +17,11 @@ class MouseController(Protocol):
         """Move the operating-system cursor to a point."""
 
 
+class KeyboardController(Protocol):
+    def press(self, key: str) -> None:
+        """Send a key press to the operating system."""
+
+
 @dataclass(frozen=True)
 class BezierPath:
     """A sampled cubic path and the delay before each sampled point."""
@@ -108,9 +113,11 @@ class HSL:
     """Human-simulation layer; mouse movement has no alternate direct path."""
 
     def __init__(self, profile: object | None = None, *, controller: MouseController | None = None,
+                 keyboard_controller: KeyboardController | None = None,
                  sleeper: Callable[[float], None] = time.sleep, rng: random.Random | None = None) -> None:
         self.profile = profile
         self.controller = controller
+        self.keyboard_controller = keyboard_controller
         self.sleeper = sleeper
         self.rng = rng
 
@@ -122,6 +129,51 @@ class HSL:
                 raise RuntimeError("pynput is required for OS mouse output") from error
             self.controller = Controller()
         return self.controller
+
+    def _get_keyboard_controller(self) -> KeyboardController:
+        if self.keyboard_controller is not None:
+            return self.keyboard_controller
+        if self.controller is not None and hasattr(self.controller, "press"):
+            self.keyboard_controller = self.controller
+            return self.keyboard_controller
+        try:
+            from pynput.keyboard import Controller
+        except ImportError as error:  # pragma: no cover - dependency is declared in project metadata
+            raise RuntimeError("pynput is required for OS keyboard output") from error
+        self.keyboard_controller = Controller()
+        return self.keyboard_controller
+
+    def _sample_skill_delay(self, skill_id: str) -> float:
+        if self.profile is None:
+            return self.rng.gauss(0.18, 0.05) if self.rng is not None else random.gauss(0.18, 0.05)
+
+        raw_timing = getattr(self.profile, "skill_timing", None)
+        if raw_timing is None and isinstance(self.profile, dict):
+            raw_timing = self.profile.get("skill_timing")
+
+        if isinstance(raw_timing, dict):
+            params = raw_timing.get(skill_id) or raw_timing.get("default") or {"mean": 0.18, "std": 0.05}
+            if isinstance(params, (list, tuple)) and len(params) == 2:
+                mean, std = float(params[0]), float(params[1])
+            else:
+                mean = float(params.get("mean", 0.18))
+                std = float(params.get("std", 0.05))
+        else:
+            mean, std = 0.18, 0.05
+
+        if std < 0:
+            raise ValueError("skill timing std must be non-negative")
+        if std == 0:
+            std = 0.01 if mean > 0 else 0.05
+        sampled = self.rng.gauss(mean, std) if self.rng is not None else random.gauss(mean, std)
+        return max(0.0, sampled)
+
+    def press_key(self, skill_id: str, key: str) -> float:
+        controller = self._get_keyboard_controller()
+        delay = self._sample_skill_delay(skill_id)
+        controller.press(key)
+        self.sleeper(delay)
+        return delay
 
     def move_mouse(self, source: Sequence[float], target: Sequence[float], *, samples: int = 24,
                    duration: float | None = None) -> BezierPath:
