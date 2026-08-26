@@ -7,6 +7,13 @@ from lagent.agent.profile import (
     validate_roi_positions,
 )
 from lagent.agent.inference import InferenceClient, PolicyQueue, frame_to_bytes
+from lagent.agent.startup import (
+    CharacterIdentifier,
+    IdentificationResult,
+    ProfileAssignment,
+    StartupProfileResolver,
+    scan_window,
+)
 
 
 def main() -> None:
@@ -22,5 +29,10 @@ __all__ = [
     "extract_roi_map",
     "frame_to_bytes",
     "load_profile",
+    "CharacterIdentifier",
+    "IdentificationResult",
+    "ProfileAssignment",
+    "StartupProfileResolver",
+    "scan_window",
     "validate_roi_positions",
 ]

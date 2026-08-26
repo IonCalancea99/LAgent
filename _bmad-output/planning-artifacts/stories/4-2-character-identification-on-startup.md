@@ -2,7 +2,7 @@
 storyId: 4.2
 epic: "Epic 4: Fishing Mode"
 title: "Character Identification on Startup"
-status: draft
+status: done
 ---
 
 # Story 4.2: Character Identification on Startup
@@ -49,3 +49,9 @@ So that the correct agent profile is assigned automatically and I am only prompt
 ## Notes
 
 The architecture's startup assignment requirement is intentional: the system should identify the class automatically in clear cases, but it must keep the operator in the loop when confidence falls below the threshold. This avoids the wrong profile being loaded silently.
+
+### Review Findings
+
+- [x] [Review][Patch] Normal startup never launches `AgentLoop` [lagent/agent/__main__.py:116] — Interactive startup now enters the control loop; non-interactive no-argument invocation preserves the scaffold entry-point contract.
+- [x] [Review][Patch] Invalid manual profile input aborts startup [lagent/agent/__main__.py:52] — CLI and resolver validation now retry until a supported profile is selected.
+- [x] [Review][Patch] Equal-confidence fingerprints are assigned by profile order [lagent/agent/startup.py:56] — Tied top-confidence fingerprints now produce an ambiguous result and use manual fallback.
