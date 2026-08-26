@@ -120,13 +120,19 @@ class HSL:
     def __init__(self, profile: object | None = None, *, controller: MouseController | None = None,
                  keyboard_controller: KeyboardController | None = None,
                  sleeper: Callable[[float], None] = time.sleep, rng: random.Random | None = None,
-                 clock: Callable[[], float] | None = None) -> None:
+                 clock: Callable[[], float] | None = None, mode: str = "active",
+                 session_id: str | None = None, sessions_db: Any = None) -> None:
+        if mode not in {"active", "shadow"}:
+            raise ValueError("mode must be 'active' or 'shadow'")
         self.profile = profile
         self.controller = controller
         self.keyboard_controller = keyboard_controller
         self.sleeper = sleeper
         self.rng = rng or random.Random()
         self.clock = clock or time.monotonic
+        self._mode = mode
+        self.session_id = session_id
+        self.sessions_db = sessions_db
         self.fatigue_factor = 1.0
         started_at = self.clock()
         self.break_active = False
@@ -141,6 +147,19 @@ class HSL:
         }
         self.cursor_position: Point = (0.0, 0.0)
         self.last_override: dict[str, Any] | None = None
+
+    @property
+    def mode(self) -> str:
+        """Return the process-fixed input mode."""
+        return self._mode
+
+    @property
+    def shadow(self) -> bool:
+        return self._mode == "shadow"
+
+    def _log_shadow_action(self, payload: dict[str, Any]) -> None:
+        if self.shadow and self.session_id is not None and self.sessions_db is not None:
+            self.sessions_db.append_event(self.session_id, "hsl", "action", payload)
 
     def _get_profile_value(self, name: str, default: object) -> object:
         if self.profile is None:
@@ -274,6 +293,8 @@ class HSL:
         return self.keyboard_controller
 
     def _click(self, button: str, clicks: int = 1) -> None:
+        if self.shadow:
+            return
         controller = self._get_controller()
         try:
             from pynput.mouse import Button
@@ -321,22 +342,52 @@ class HSL:
                 raise ValueError("mouse_move requires x and y")
             result = self.move_mouse(action_source, (action.x, action.y))
             self.cursor_position = (float(action.x), float(action.y))
+            self._log_shadow_action({
+                "action_type": action.action_type,
+                "target": [action.x, action.y],
+                "bezier_path": self._path_payload(result),
+                "timing_value": sum(result.delays) * self.fatigue_factor,
+                "fatigue_factor": self.fatigue_factor,
+            })
             return result
         if action.action_type == "mouse_click":
             if action.x is not None and action.y is not None:
-                self.move_mouse(action_source, (action.x, action.y))
+                path = self.move_mouse(action_source, (action.x, action.y))
                 self.cursor_position = (float(action.x), float(action.y))
+            else:
+                path = None
             self._click(action.button or "left", action.clicks or 1)
+            self._log_shadow_action({
+                "action_type": action.action_type,
+                "target": [action.x, action.y] if action.x is not None and action.y is not None else None,
+                "button": action.button or "left",
+                "clicks": action.clicks or 1,
+                "bezier_path": self._path_payload(path),
+                "timing_value": sum(path.delays) * self.fatigue_factor if path is not None else 0.0,
+                "fatigue_factor": self.fatigue_factor,
+            })
             return None
         if action.action_type == "key_press":
             if not action.key:
                 raise ValueError("key_press requires key")
-            return self.press_key(skill_id, action.key)
+            delay = self.press_key(skill_id, action.key)
+            self._log_shadow_action({
+                "action_type": action.action_type,
+                "key": action.key,
+                "timing_value": delay,
+                "fatigue_factor": self.fatigue_factor,
+            })
+            return delay
         if action.action_type == "wait":
             self._tick_fatigue()
             delay = max(0.0, action.duration or 0.0) * self.fatigue_factor
             if not self.break_active:
                 self.sleeper(delay)
+            self._log_shadow_action({
+                "action_type": action.action_type,
+                "timing_value": delay,
+                "fatigue_factor": self.fatigue_factor,
+            })
             return delay
         raise ValueError(f"unsupported action type: {action.action_type}")
 
@@ -364,6 +415,16 @@ class HSL:
         return drifted
 
     dispatch = dispatch_action
+
+    @staticmethod
+    def _path_payload(path: BezierPath | None) -> dict[str, Any] | None:
+        if path is None:
+            return None
+        return {
+            "points": [list(point) for point in path.points],
+            "delays": list(path.delays),
+            "control_points": [list(point) for point in path.control_points],
+        }
 
     def _sample_skill_delay(self, skill_id: str) -> float:
         if self.profile is None:
@@ -395,9 +456,9 @@ class HSL:
         if self.break_active:
             return 0.0
 
-        controller = self._get_keyboard_controller()
         delay = self._sample_skill_delay(skill_id)
-        controller.press(key)
+        if not self.shadow:
+            self._get_keyboard_controller().press(key)
         self.sleeper(delay)
         return delay
 
@@ -410,8 +471,10 @@ class HSL:
         if self.break_active:
             return path
 
-        controller = self._get_controller()
-        for point, delay in zip(path.points[1:], path.delays):
-            controller.move(*point)
-            self.sleeper(delay * self.fatigue_factor)
+        if not self.shadow:
+            controller = self._get_controller()
+            for point, delay in zip(path.points[1:], path.delays):
+                controller.move(*point)
+                self.sleeper(delay * self.fatigue_factor)
         return path
+        

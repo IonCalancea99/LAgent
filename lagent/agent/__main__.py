@@ -28,6 +28,7 @@ def main() -> None:
         help="Session ID (auto-generated if not provided)",
     )
     parser.add_argument("--debug", action="store_true", help="Run the live capture and inference debug pipeline")
+    parser.add_argument("--shadow", action="store_true", help="Shape and log actions without sending OS input")
     parser.add_argument("--window-title", default="Lineage II", help="Game window title to capture")
     parser.add_argument("--gpu-endpoint", default=GPU_ENDPOINT, help="GPU inference server endpoint")
     parser.add_argument("--fps", type=int, default=10, help="Capture and inference rate")
@@ -53,7 +54,7 @@ def main() -> None:
         db.log_session_start(
             session_id=session_id,
             profile=args.profile_class,
-            mode="active"
+            mode="shadow" if args.shadow else "active"
         )
         logger.info("Session started: %s", session_id)
         
@@ -65,7 +66,8 @@ def main() -> None:
             payload={
                 "profile": args.profile_class,
                 "component": "agent",
-                "status": "initialized"
+                "status": "initialized",
+                "mode": "shadow" if args.shadow else "active",
             }
         )
         

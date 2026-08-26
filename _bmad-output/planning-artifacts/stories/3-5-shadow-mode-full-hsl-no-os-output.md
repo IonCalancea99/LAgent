@@ -2,7 +2,7 @@
 storyId: 3.5
 epic: "Epic 3: Human Simulation Layer & Shadow Mode"
 title: "Shadow Mode - Full HSL Shaping Without OS Output"
-status: ready
+status: done
 ---
 
 # Story 3.5: Shadow Mode - Full HSL Shaping Without OS Output
