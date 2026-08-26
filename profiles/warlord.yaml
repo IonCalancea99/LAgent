@@ -2,10 +2,16 @@ name: warlord
 roi_positions:
   health_bar: [100, 20, 300, 40]
   mana_bar: [100, 45, 300, 65]
+  mob_area: [300, 100, 1200, 800]
 fsm_bindings:
-  idle: {next: pulling}
-  pulling: {next: fighting}
+  idle: {}
+  pulling: {frame_center: [500, 500], melee_tolerance: 75}
+  fighting: {}
+  looting: {loot_timeout: 5.0}
 skill_key_bindings:
+  pull: "2"
+  aoe: "1"
+  loot: "f"
   attack: "1"
   assist: "2"
 buff_timer_durations:
@@ -20,3 +26,10 @@ skill_timing:
   assist: {mean: 0.18, std: 0.05}
 enable_ocr: true
 enable_recording: false
+recovery:
+  actions:
+    - {action_type: key_press, key: "enter"}
+inventory:
+  return_actions: []
+  deposit: []
+  drop: []

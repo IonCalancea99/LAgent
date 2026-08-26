@@ -33,6 +33,7 @@ class AgentLoop:
         capture: Any | None = None,
         inference: Any | None = None,
         party_bus: Any | None = None,
+        session_cap: Any | None = None,
     ) -> None:
         self.frame_queue = frame_queue
         self.policy_queue = policy_queue
@@ -46,6 +47,7 @@ class AgentLoop:
         self.capture = capture
         self.inference = inference
         self.party_bus = party_bus
+        self.session_cap = session_cap
         self._tick_counter = 0
 
     def _current_state_name(self) -> str:
@@ -104,7 +106,10 @@ class AgentLoop:
             logger.warning("AgentLoop: FSM bindings not found in profile; state transition disabled")
             return from_state
         
-        current_binding = fsm_bindings.get(from_state, {})
+        current_binding = next(
+            (value for key, value in fsm_bindings.items() if str(key).upper() == from_state.upper()),
+            {},
+        )
         
         # Handle both dict and object bindings
         if isinstance(current_binding, dict):
@@ -118,7 +123,11 @@ class AgentLoop:
 
         if next_state is not None:
             # Validate next_state is in the valid set
-            valid_states = {"IDLE", "CASTING", "WAITING", "REELING", "STOPPED"}
+            valid_states = {
+                "IDLE", "CASTING", "WAITING", "REELING", "STOPPED",
+                "PULLING", "FIGHTING", "LOOTING", "BUFFING", "DEAD", "RETURNING", "PAUSED",
+            }
+            next_state = str(next_state).upper()
             if next_state not in valid_states:
                 logger.error("AgentLoop: Invalid FSM state transition: %s → %s (not in valid states)", from_state, next_state)
                 return from_state
@@ -202,6 +211,9 @@ class AgentLoop:
         self._poll_party_bus()
         self._publish_heartbeat()
 
+        if self.session_cap is not None and self.session_cap.expired():
+            self.state_name = "STOPPED"
+
         if self.state_name == "PAUSED":
             payload = {
                 "tick_id": tick_id,
@@ -217,6 +229,11 @@ class AgentLoop:
         frame = self._pop_frame()
         result = self._pop_policy_result()
         if frame is None and result is None:
+            if self.state_name in {"PAUSED", "DEAD", "RETURNING", "STOPPED"}:
+                payload = {"tick_id": tick_id, "state": self.state_name, "frame_count": 0, "status": "safe", "action": None,
+                           "latency_ms": (time.perf_counter() - started) * 1000}
+                self._log_tick(tick_id, payload)
+                return payload
             action = Action(action_type="wait", duration=0.0)
             if self.hsl is not None:
                 try:
@@ -273,6 +290,12 @@ class AgentLoop:
             logger.exception("state handler failed during tick %s", tick_id)
             action = None
         if action is None:
+            if self.state_name in {"PAUSED", "DEAD", "RETURNING", "STOPPED"}:
+                self._task_done(self.policy_queue, result)
+                payload = {"tick_id": tick_id, "state": self.state_name, "frame_count": 1, "status": "safe", "action": None,
+                           "latency_ms": (time.perf_counter() - started) * 1000}
+                self._log_tick(tick_id, payload)
+                return payload
             action = Action(action_type="wait", duration=0.0)
 
         if self.hsl is not None:
@@ -282,14 +305,15 @@ class AgentLoop:
                 logger.exception("HSL dispatch failed during tick %s", tick_id)
         self._task_done(self.policy_queue, result)
 
-        # AC-1: Transition to next FSM state based on FSM bindings
-        next_state = self._transition_state(self.state_name, action)
+        # Preserve the state that evaluated this frame in the tick payload.
+        evaluated_state = self.state_name
+        next_state = self._transition_state(evaluated_state, action)
         self.state_name = next_state
 
         elapsed_ms = (time.perf_counter() - started) * 1000
         payload = {
             "tick_id": tick_id,
-            "state": self.state_name,
+            "state": evaluated_state,
             "frame_count": 1,
             "action": action,
             "status": "completed",

@@ -2,6 +2,7 @@ name: prophet
 roi_positions:
   health_bar: [100, 20, 300, 40]
   mana_bar: [100, 45, 300, 65]
+  mob_area: [300, 100, 1200, 800]
 fsm_bindings:
   idle: {next: buffing}
   buffing: {next: following}
@@ -22,3 +23,10 @@ skill_timing:
   buff: {mean: 0.22, std: 0.07}
 enable_ocr: true
 enable_recording: false
+recovery:
+  actions:
+    - {action_type: key_press, key: "enter"}
+inventory:
+  return_actions: []
+  deposit: []
+  drop: []

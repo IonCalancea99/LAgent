@@ -168,6 +168,9 @@ class AgentProfile(BaseModel):
         },
         description="Per-skill Gaussian keystroke timing parameters keyed by skill name with mean/std in seconds",
     )
+    recovery: Dict[str, Any] = Field(default_factory=dict, description="Profile-driven death recovery action sequence")
+    inventory: Dict[str, Any] = Field(default_factory=dict, description="Profile-driven town return and loot rules")
+    session_cap_duration: float | None = Field(default=None, ge=0.0, description="Optional monotonic session cap in seconds")
     fatigue_step: float = Field(default=0.05, ge=0.0, description="Increment added to the fatigue factor each fatigue interval")
     fatigue_ceiling: float = Field(default=1.5, ge=1.0, description="Maximum fatigue multiplier before a break is triggered")
     fatigue_interval: float | Tuple[float, float] = Field(

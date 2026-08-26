@@ -79,12 +79,12 @@ development_status:
   5-2-pp-buff-safety-check: in-progress
   5-3-orchestrator-heartbeat-monitor-session-halt: done
   epic-5-retrospective: optional
-  epic-6: backlog
-  6-1-warlord-combat-fsm-pull-fight-loot: backlog
-  6-2-prophet-buff-cycle-fsm-timer-driven-buffing: backlog
-  6-3-death-detection-full-party-recovery: backlog
-  6-4-inventory-full-detection-town-return: backlog
-  6-5-session-cap-clean-shutdown: backlog
+  epic-6: done
+  6-1-warlord-combat-fsm-pull-fight-loot: done
+  6-2-prophet-buff-cycle-fsm-timer-driven-buffing: done
+  6-3-death-detection-full-party-recovery: done
+  6-4-inventory-full-detection-town-return: done
+  6-5-session-cap-clean-shutdown: done
   epic-6-retrospective: optional
   epic-7: backlog
   7-1-recording-mode-dual-write-frame-capture-input-log: backlog

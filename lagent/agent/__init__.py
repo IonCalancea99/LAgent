@@ -16,7 +16,15 @@ from lagent.agent.startup import (
 )
 from lagent.agent.fishing_fsm import FishingFSM
 from lagent.agent.loop import AgentLoop
-from lagent.agent.prophet import PPBuffSafetyCheck, ProphetBuffPolicy
+from lagent.agent.prophet import PPBuffSafetyCheck, ProphetBuffCycleFSM, ProphetBuffPolicy
+from lagent.agent.warlord import WarlordCombatFSM
+from lagent.agent.lifecycle import (
+    DeathRecoveryController,
+    InventoryReturnController,
+    LifecycleSignal,
+    SessionCapController,
+    detect_lifecycle_signal,
+)
 
 
 def main() -> None:
@@ -40,4 +48,11 @@ __all__ = [
     "validate_roi_positions",
     "PPBuffSafetyCheck",
     "ProphetBuffPolicy",
+    "ProphetBuffCycleFSM",
+    "WarlordCombatFSM",
+    "DeathRecoveryController",
+    "InventoryReturnController",
+    "LifecycleSignal",
+    "SessionCapController",
+    "detect_lifecycle_signal",
 ]
