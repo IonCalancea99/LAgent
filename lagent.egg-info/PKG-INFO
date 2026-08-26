@@ -8,6 +8,8 @@ Requires-Dist: pydantic<3.0.0,>=2.11.0
 Requires-Dist: PyYAML<7.0.0,>=6.0.1
 Requires-Dist: pyzmq<27.0.0,>=26.0.0
 Requires-Dist: structlog<25.0.0,>=24.0.0
+Requires-Dist: ultralytics<9.0.0,>=8.3.0
+Requires-Dist: easyocr<2.0.0,>=1.7.0
 Requires-Dist: dxcam==0.0.5
 Requires-Dist: mss<10.0.0,>=9.0.0
 Requires-Dist: pynput<2.0.0,>=1.7.0

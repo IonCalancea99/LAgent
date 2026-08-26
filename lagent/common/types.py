@@ -42,6 +42,15 @@ class GameState(BaseModel):
     loot_presence: bool = Field(default=False, description="Loot visible on ground")
     character_position: Tuple[int, int] = Field(description="Agent character (x, y) position")
     ui_mode: str = Field(description="Current UI mode (e.g., 'combat', 'town')")
+    peer_party_state: "PartyState | None" = Field(
+        default=None,
+        description="Read-only snapshot of the peer agent's last valid PartyState; local GameState remains authoritative.",
+    )
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        if name == "peer_party_state" and name in self.__dict__ and self.__dict__[name] is not None:
+            raise AttributeError("peer_party_state is read-only")
+        super().__setattr__(name, value)
 
 
 class PartyState(BaseModel):

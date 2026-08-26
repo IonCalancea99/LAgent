@@ -25,6 +25,12 @@ This folder is the single place for story artifacts used during implementation p
 - 4.3 Fishing FSM — Cast and Wait States
 - 4.4 Fishing FSM — Tension Detection and Reel
 
+## Epic 5 - Party Orchestration
+
+- 5.1 Party Bus — PartyState PUB/SUB Exchange
+- 5.2 PP Buff Safety Check
+- 5.3 Orchestrator Heartbeat Monitor & Session Halt
+
 ## Naming Convention
 
 Story files are named `<epic>-<story>-<slug>.md`, for example `3-1-bezier-mouse-path-generator.md`.

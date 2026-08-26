@@ -595,6 +595,14 @@ So that the Phase 1 gate is met and the full end-to-end pipeline is validated on
 
 WL Agent and PP Agent exchange state over the Party Bus. PP buff Safety Check works correctly. The Orchestrator monitors heartbeats and halts both agents on missed heartbeats.
 
+### Epic 5 Shared Contracts
+
+- **PartyState payload:** Each state message uses the existing JSON envelope `{agent_id, type: "party_state", payload}`. `payload` is the complete serialized `PartyState` object and contains exactly `fsm_state` (string), `hp_percent` (0-100 number), `mp_percent` (0-100 number), `position` (`[x, y]` integer frame-pixel coordinates, origin top-left), `buff_presence` (map of buff name to boolean), and `heartbeat_timestamp` (Unix timestamp). Agents publish one complete snapshot on every policy tick; snapshots are replaced atomically and are never merged.
+- **Peer-state freshness:** A subscriber retains the last valid snapshot as a read-only value and records its local `received_at` separately. After `HEARTBEAT_INTERVAL * HEARTBEAT_MISSED_COUNT` (default 3 seconds) without a valid message from that peer, the snapshot is marked stale and a `party_bus_disconnected` warning is logged. Stale data is not treated as current input; the Orchestrator's halt protocol remains authoritative for stopping both agents.
+- **Heartbeat payload:** Heartbeats use the same Agent PUB endpoint and JSON envelope `{agent_id, type: "heartbeat", payload: {heartbeat_timestamp}}`; the Orchestrator records the observation time on receipt and does not consume `GameState` or `PartyState`.
+- **Session event contract:** Required event types are `party_bus_disconnected`, `buff_cast_deferred`, `heartbeat_missed`, `session_halt`, `session_resume`, and `party_bus_reconnected`. Every payload includes `agent_id` or `agent_ids` as applicable, `session_id`, and `reason`; state-related events additionally include `fsm_state` or `prior_fsm_state` where applicable. Events are appended to `data/sessions.db` using the existing `source`, `type`, and `payload_json` columns.
+- **Halt control:** The Orchestrator publishes `{type: "session_halt", payload: {session_id, reason: "heartbeat_missed", missed_agent_id, missed_count}}` on its control PUB/SUB endpoint. Both agents latch `PAUSED`, capture their pre-halt FSM state once, cancel or abandon pending actions, and produce no OS input. A heartbeat resuming does not auto-resume a halted session; an explicit operator resume after both agents are healthy publishes `{type: "session_resume", payload: {session_id, reason: "operator_resume", agent_ids}}`, after which each agent restores its captured pre-halt FSM state and logs the transition. The Orchestrator signals processes; it does not restart them.
+
 ### Story 5.1: Party Bus — PartyState PUB/SUB Exchange
 
 As Ion,
@@ -605,15 +613,19 @@ So that each Agent has real-time visibility into the other's state without share
 
 **Given** WL Agent and PP Agent are both running with PUB sockets bound
 **When** WL Agent publishes a `PartyState` with `fsm_state: PULLING`
-**Then** PP Agent's SUB socket receives the message within one tick; PP Agent's policy loop can read `peer_party_state.fsm_state == PULLING`
+**Then** PP Agent's SUB socket receives the complete `party_state` envelope within one policy tick; PP Agent's policy loop can read `peer_party_state.fsm_state == PULLING`; the serialized payload conforms to the Epic 5 PartyState contract
 
 **Given** the Party Bus message is published
 **When** the PP Agent reads the peer state
 **Then** PP Agent's own `GameState` is not modified; only the read-only `peer_party_state` field is updated (AD-4)
 
+**Given** multiple peer messages arrive while the policy loop is processing
+**When** the next message is accepted
+**Then** the complete latest snapshot replaces the previous snapshot atomically; no fields are merged across messages and no partially updated snapshot is observable
+
 **Given** the Party Bus connection is lost (WL Agent process killed)
 **When** PP Agent attempts to read peer state
-**Then** the last known `PartyState` is retained; PP Agent does not crash; a "party bus disconnected" warning is logged
+**Then** the last valid `PartyState` is retained as read-only, marked stale after the configured missed-heartbeat window, PP Agent does not crash, and a `party_bus_disconnected` warning and session event are logged; the Orchestrator halt protocol is used for the coordinated pause
 
 ---
 
@@ -629,9 +641,17 @@ So that PP never draws mob aggro by casting at the wrong moment — and if the c
 **When** no mobs are within the pixel-coordinate aggro-risk radius (per AD-10b) and WL `PartyState.fsm_state` is not PULLING
 **Then** Safety Check passes; the buff cast is executed immediately
 
+**Given** a current-frame `PerceptionResult` contains mob detections and PP has a current-frame character position
+**When** the Safety Check evaluates proximity
+**Then** it uses each mob detection's `bbox_xyxy` center and PP's `GameState.character_position`, both in captured-frame pixels with origin top-left; a mob is within the risk radius when Euclidean distance is less than or equal to the configured radius; no game-world coordinates are used
+
+**Given** PP buff timer has expired
+**When** WL `PartyState.fsm_state` is `PULLING`
+**Then** Safety Check fails even when no mob is currently inside the radius; `FIGHTING` and other non-`PULLING` WL states do not fail the state-only condition
+
 **Given** PP buff timer has expired
 **When** a mob is detected within the aggro-risk radius in the current frame
-**Then** Safety Check fails; the buff cast is deferred by the configured retry interval; the deferral is logged; the check is re-evaluated on the next eligible tick
+**Then** Safety Check fails; the retry timer starts at the time of the failed check; the buff cast is deferred by the configured retry interval; a `buff_cast_deferred` event records the failed condition and next eligible timestamp; PP continues normal non-cast policy-loop work while waiting
 
 **Given** Safety Check has failed repeatedly
 **When** the retry interval elapses
@@ -649,15 +669,19 @@ So that a stuck or crashed agent never leaves the other agent running unmonitore
 
 **Given** both agents are running and publishing heartbeats piggybacked on their Party Bus PUB messages
 **When** the Orchestrator's SUB sockets receive heartbeats
-**Then** the Orchestrator logs the last-seen timestamp per agent; no halt is triggered while heartbeats arrive within the configured interval
+**Then** the Orchestrator records the last-seen timestamp per agent from receipt time and no halt is triggered while each heartbeat arrives before `HEARTBEAT_INTERVAL * HEARTBEAT_MISSED_COUNT`
 
 **Given** one agent stops publishing (process killed or hung)
 **When** N consecutive heartbeat intervals (configurable, default 3) pass without a message
-**Then** the Orchestrator logs a halt event to `sessions.db`; both agents receive a halt signal and enter a PAUSED state producing no further OS input
+**Then** the Orchestrator emits one `session_halt` control message with `reason: heartbeat_missed`, `missed_agent_id`, and `missed_count`; logs `heartbeat_missed` and `session_halt` events to `sessions.db`; both agents capture their current FSM state, enter latched `PAUSED`, cancel pending actions, and produce no further OS input
 
 **Given** a halted session is recovered (agent restarted and heartbeats resume)
 **When** the Orchestrator detects resumed heartbeats
-**Then** agents restore their prior FSM states; the reconnection event is logged
+**Then** the Orchestrator logs `party_bus_reconnected` with both agents' health status, but does not automatically resume input; only after both agents are healthy and an explicit `session_resume` control message with `{session_id, reason: "operator_resume", agent_ids}` is received do agents restore the FSM state captured at halt, log `session_resume`, and continue
+
+**Given** the Orchestrator has emitted a halt for a missed heartbeat
+**When** a single agent process is still running
+**Then** the Orchestrator signals both agents and does not restart either process; process restart, if needed, remains an explicit Tray/UI operation before the resume protocol
 
 ---
 
