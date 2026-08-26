@@ -10,9 +10,11 @@ from lagent.common import Action, PerceptionResult
 from lagent.agent.capture import CaptureThread
 from lagent.agent.inference import InferenceClient, PolicyQueue
 from lagent.agent.loop import AgentLoop
+from lagent.agent.fishing_fsm import FishingFSM
 from lagent.agent.startup import StartupProfileResolver, scan_window
 from lagent.common.transport import GPU_ENDPOINT
 from lagent.common.sessions_db import SessionsDB
+from lagent.hsl import HSL
 
 
 def main() -> None:
@@ -21,7 +23,7 @@ def main() -> None:
         "--class",
         dest="profile_class",
         default=None,
-        choices=("warlord", "prophet"),
+        choices=("warlord", "prophet", "fishing"),
     )
     parser.add_argument(
         "--session-id",
@@ -126,11 +128,22 @@ def main() -> None:
                 profile=profile,
                 debug=True,
             )
+            fishing_fsm = FishingFSM(
+                profile=profile,
+                session_id=session_id,
+                db=db,
+            ) if selected_class == "fishing" else None
+            hsl = HSL(
+                profile=profile,
+                mode="shadow" if args.shadow else "active",
+                session_id=session_id,
+                sessions_db=db,
+            )
             loop = AgentLoop(
                 frame_queue=capture.frame_queue,
                 policy_queue=policy_queue,
-                state_handler=lambda result, state: Action(action_type="wait", duration=0.0),
-                hsl=None,
+                state_handler=fishing_fsm or (lambda result, state: Action(action_type="wait", duration=0.0)),
+                hsl=hsl,
                 profile=profile,
                 session_id=session_id,
                 db=db,

@@ -110,9 +110,13 @@ class AgentLoop:
         else:
             next_state = getattr(current_binding, "next", None)
         
+        handler_next_state = getattr(self.state_handler, "next_state", None)
+        if handler_next_state is not None:
+            next_state = handler_next_state
+
         if next_state is not None:
             # Validate next_state is in the valid set
-            valid_states = {"IDLE", "CASTING", "WAITING", "STOPPED"}
+            valid_states = {"IDLE", "CASTING", "WAITING", "REELING", "STOPPED"}
             if next_state not in valid_states:
                 logger.error("AgentLoop: Invalid FSM state transition: %s → %s (not in valid states)", from_state, next_state)
                 return from_state

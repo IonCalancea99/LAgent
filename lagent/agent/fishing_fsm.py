@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import time
 import logging
-from typing import Optional, Any
+import time
+from typing import Any, Callable, Optional
 
 from lagent.common import Action, PerceptionResult
 
@@ -30,11 +30,15 @@ class FishingFSM:
 
     def __init__(
         self,
-        cast_key: str = "2",
-        wait_timeout: float = 10.0,
+        cast_key: Optional[str] = None,
+        reel_key: Optional[str] = None,
+        wait_timeout: Optional[float] = None,
+        tension_class: Optional[str] = None,
+        tension_confidence_threshold: Optional[float] = None,
         profile: Optional[Any] = None,
         session_id: Optional[str] = None,
         db: Optional[Any] = None,
+        clock: Callable[[], float] = time.time,
     ):
         """
         Initialize Fishing FSM.
@@ -46,16 +50,42 @@ class FishingFSM:
             session_id: Session ID for logging
             db: Sessions database for event logging
         """
-        self.cast_key = cast_key
-        self.wait_timeout = wait_timeout
         self.profile = profile
         self.session_id = session_id
         self.db = db
+        self.clock = clock
+
+        bindings = {}
+        if isinstance(profile, dict):
+            bindings = profile.get("fsm_bindings", {})
+        elif profile is not None:
+            bindings = getattr(profile, "fsm_bindings", {})
+        idle_binding = bindings.get("IDLE", {})
+        waiting_binding = bindings.get("WAITING", {})
+        reeling_binding = bindings.get("REELING", {})
+        self.cast_key = cast_key or idle_binding.get("cast_key", "2")
+        self.reel_key = reel_key or reeling_binding.get("reel_key", "3")
+        self.wait_timeout = wait_timeout if wait_timeout is not None else waiting_binding.get("wait_timeout", 10.0)
+        self.tension_class = (tension_class or waiting_binding.get("tension_class", "tension_indicator")).lower()
+        self.tension_confidence_threshold = (
+            tension_confidence_threshold
+            if tension_confidence_threshold is not None
+            else waiting_binding.get("tension_confidence_threshold", 0.80)
+        )
         
         # FSM state tracking
         self.state = "IDLE"
         self.wait_started_at: Optional[float] = None
         self.halted = False
+        self.next_state: Optional[str] = None
+
+    def _tension_detection(self, result: PerceptionResult) -> Any | None:
+        aliases = {self.tension_class, "tension", "tension_indicator"}
+        return max(
+            (detection for detection in result.detections if detection.class_name.lower() in aliases),
+            key=lambda detection: detection.confidence,
+            default=None,
+        )
 
     def _log_event(self, event_type: str, payload: dict[str, Any]) -> None:
         """Log FSM event to sessions database."""
@@ -101,7 +131,7 @@ class FishingFSM:
         """
         # Detect if we're entering WAITING state fresh (from a different state)
         entering_waiting_fresh = (state_name == "WAITING" and self.state != "WAITING")
-        
+        self.next_state = None
         self.state = state_name
         
         # AC-3: If halted, produce no further input
@@ -122,20 +152,39 @@ class FishingFSM:
             return Action(action_type="wait", duration=0.5)
 
         elif state_name == "WAITING":
+            tension = self._tension_detection(result)
+            if tension is not None and tension.confidence >= self.tension_confidence_threshold:
+                tension_window = max(0.0, self.clock() - self.wait_started_at) if self.wait_started_at is not None else 0.0
+                self._log_event(
+                    "tension_detected",
+                    {"confidence": tension.confidence, "tension_window": tension_window},
+                )
+                self.next_state = "REELING"
+                return Action(action_type="wait", duration=0.0)
+
             # AC-2: Check for timeout; if exceeded, return to IDLE
             # Reset timer if entering WAITING for the first time (coming from another state)
             if entering_waiting_fresh or self.wait_started_at is None:
-                self.wait_started_at = time.time()
+                self.wait_started_at = self.clock()
                 logger.debug("Fishing FSM: WAITING started at %s", self.wait_started_at)
 
-            elapsed = time.time() - self.wait_started_at
+            elapsed = self.clock() - self.wait_started_at
             remaining = max(0.0, self.wait_timeout - elapsed)  # Clamp to non-negative
 
             if remaining <= 0:
                 # Timeout: no bite detected, return to IDLE
                 logger.info("Fishing FSM: WAITING timeout (waited %.2f seconds) → IDLE", elapsed)
+                self._log_event(
+                    "missed_tension",
+                    {
+                        "confidence": tension.confidence if tension is not None else 0.0,
+                        "tension_window": elapsed,
+                        "timeout": True,
+                    },
+                )
                 self._log_event("timeout", {"wait_timeout": self.wait_timeout, "elapsed": elapsed})
                 self.wait_started_at = None
+                self.next_state = "IDLE"
                 # Signal external handler to transition to IDLE
                 return Action(action_type="wait", duration=0.0)
 
@@ -143,6 +192,11 @@ class FishingFSM:
             logger.debug("Fishing FSM: WAITING for bite (%.2f seconds remaining)", remaining)
             return Action(action_type="wait", duration=min(0.1, remaining))
 
+        elif state_name == "REELING":
+            self._log_event("reel", {"key": self.reel_key})
+            self.next_state = "IDLE"
+            return Action(action_type="key_press", key=self.reel_key)
+
         # Unknown FSM state: raise error to catch integration bugs early
         logger.error("Unknown FSM state: %s", state_name)
-        raise ValueError(f"Invalid FSM state: {state_name}. Valid states: IDLE, CASTING, WAITING, STOPPED")
+        raise ValueError(f"Invalid FSM state: {state_name}. Valid states: IDLE, CASTING, WAITING, REELING, STOPPED")

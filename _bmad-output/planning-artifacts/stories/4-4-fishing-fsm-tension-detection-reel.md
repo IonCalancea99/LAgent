@@ -2,7 +2,7 @@
 storyId: 4.4
 epic: "Epic 4: Fishing Mode"
 title: "Fishing FSM — Tension Detection and Reel"
-status: draft
+status: done
 ---
 
 # Story 4.4: Fishing FSM — Tension Detection and Reel
@@ -49,3 +49,9 @@ So that the Phase 1 gate is met and the full end-to-end pipeline is validated on
 ## Notes
 
 This is the Phase 1 gate story for fishing. It should be validated using deterministic seeded replays before live 60-minute runtime confirmation, as recommended by the architecture and implementation-readiness review.
+
+### Review Findings
+
+- [x] [Review][Patch] Wire the fishing FSM, fishing profile selection, and HSL into the runnable agent path.
+- [x] [Review][Patch] Verify reel actions are dispatched through HSL in the Story 4.4 integration test.
+- [x] [Review][Patch] Expand deterministic replay coverage to repeated cast, wait, tension, reel cycles including the 0.80 threshold boundary.

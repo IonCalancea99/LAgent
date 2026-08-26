@@ -15,6 +15,11 @@ fsm_bindings:
     next: IDLE
     wait_timeout: 10.0
     timeout_action: return_to_idle
+    tension_class: tension_indicator
+    tension_confidence_threshold: 0.80
+  REELING:
+    next: IDLE
+    reel_key: "3"
 skill_key_bindings:
   cast: "2"
   reel: "3"
@@ -22,7 +27,7 @@ buff_timer_durations:
   haste: 300.0
 confidence_thresholds:
   default: 0.6
-  tension_indicator: 0.75
+  tension_indicator: 0.80
 confidence_threshold: 0.6
 bezier_offset_range: [15, 30]
 skill_timing:

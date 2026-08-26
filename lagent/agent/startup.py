@@ -14,7 +14,7 @@ from lagent.common import Detection, PerceptionResult
 from lagent.common.transport import AgentTransport
 
 logger = logging.getLogger(__name__)
-SUPPORTED_PROFILES = ("warlord", "prophet")
+SUPPORTED_PROFILES = ("warlord", "prophet", "fishing")
 
 
 @dataclass(frozen=True)
