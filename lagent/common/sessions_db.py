@@ -92,9 +92,22 @@ def create_db_bootstrap(db_path: str) -> sqlite3.Connection:
                 started_at TEXT NOT NULL,
                 profile TEXT NOT NULL,
                 mode TEXT NOT NULL,
+                ended_at TEXT,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        
+        # Migrate existing databases: add ended_at column if it doesn't exist
+        cursor = conn.execute("PRAGMA table_info(sessions)")
+        columns = {row[1] for row in cursor.fetchall()}
+        if 'ended_at' not in columns:
+            try:
+                conn.execute("ALTER TABLE sessions ADD COLUMN ended_at TEXT")
+                conn.commit()
+                logger.info("Migrated sessions table: added ended_at column")
+            except sqlite3.OperationalError:
+                # Column may already exist or migration may have already run
+                pass
         
         conn.execute("""
             CREATE TABLE IF NOT EXISTS events (
@@ -206,7 +219,7 @@ class SessionsDB:
     def get_session(self, session_id: str) -> Optional[Dict[str, Any]]:
         """Return a single session row as a dictionary."""
         row = self.conn.execute(
-            "SELECT session_id, started_at, profile, mode, created_at FROM sessions WHERE session_id = ?",
+            "SELECT session_id, started_at, profile, mode, ended_at, created_at FROM sessions WHERE session_id = ?",
             (session_id,),
         ).fetchone()
         if row is None:
@@ -217,9 +230,43 @@ class SessionsDB:
             "started_at",
             "profile",
             "mode",
+            "ended_at",
             "created_at",
         ]
         return {key: value for key, value in zip(columns, row)}
+
+    def log_session_end(
+        self,
+        session_id: str,
+        outcome: str = "clean"
+    ) -> None:
+        """
+        Log a session end event by updating the ended_at timestamp.
+        
+        Args:
+            session_id: Session ID
+            outcome: "clean" or "forced" shutdown outcome
+        
+        Raises:
+            sqlite3.OperationalError: If database operation fails
+        """
+        ended_at = datetime.now().isoformat()
+        
+        try:
+            self.conn.execute(
+                """
+                UPDATE sessions 
+                SET ended_at = ?
+                WHERE session_id = ?
+                """,
+                (ended_at, session_id)
+            )
+            self.conn.commit()
+            logger.debug(f"Session ended: {session_id} (outcome={outcome})")
+            
+        except sqlite3.OperationalError as e:
+            logger.error(f"Failed to log session end: {e}")
+            raise
 
     def get_events_by_type(
         self,
