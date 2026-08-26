@@ -146,6 +146,16 @@ class AgentProfile(BaseModel):
         },
         description="Per-skill Gaussian keystroke timing parameters keyed by skill name with mean/std in seconds",
     )
+    fatigue_step: float = Field(default=0.05, ge=0.0, description="Increment added to the fatigue factor each fatigue interval")
+    fatigue_ceiling: float = Field(default=1.5, ge=1.0, description="Maximum fatigue multiplier before a break is triggered")
+    fatigue_interval: float | Tuple[float, float] = Field(
+        default=(1800.0, 3600.0),
+        description="Session seconds between fatigue increments; may also be provided as a (min, max) range",
+    )
+    break_duration_range: Tuple[float, float] = Field(
+        default=(300.0, 900.0),
+        description="Randomized break duration range in seconds",
+    )
     
     # Mode flags
     enable_ocr: bool = Field(default=True, description="Enable OCR processing")
