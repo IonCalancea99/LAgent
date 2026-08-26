@@ -71,7 +71,7 @@ development_status:
   epic-4: backlog
   4-1-agent-base-loop-capture-to-policy-single-window-pipeline: backlog
   4-2-character-identification-on-startup: done
-  4-3-fishing-fsm-cast-and-wait-states: backlog
+  4-3-fishing-fsm-cast-wait-states: in-progress
   4-4-fishing-fsm-tension-detection-and-reel-phase-1-gate-complete: backlog
   epic-4-retrospective: optional
   epic-5: backlog

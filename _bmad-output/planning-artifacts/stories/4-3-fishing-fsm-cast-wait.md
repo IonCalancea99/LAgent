@@ -2,7 +2,7 @@
 storyId: 4.3
 epic: "Epic 4: Fishing Mode"
 title: "Fishing FSM — Cast and Wait States"
-status: draft
+status: in-progress
 ---
 
 # Story 4.3: Fishing FSM — Cast and Wait States
@@ -39,6 +39,40 @@ So that the first half of the fishing loop runs autonomously and timeouts return
 - HSL execution path for cast key sequence
 - State transition logic and session halt handling
 - Session DB logging for timeout and halt events
+
+## Review Findings
+
+**Code Review — Story 4.3 (2026-08-26)**
+Generated from Blind Hunter + Edge Case Hunter + Acceptance Auditor layers.
+**Status: PATCHES APPLIED ✓**
+
+### Decisions Resolved
+
+- [x] [Review][Decision] **State Name Case Convention** — Resolved: Normalized all state names to UPPERCASE (IDLE, CASTING, WAITING, STOPPED) in both FishingFSM and profile bindings.
+
+- [x] [Review][Decision] **Halt Signal Integration** — Resolved: Implemented callback/signal handler pattern via `AgentLoop.request_halt()` method. Session layer calls this method to propagate halt to FSM.
+
+### Patches Applied ✓
+
+- [x] [Review][Patch] **State Validation & Silent Failures** [loop.py:106-109, fishing_fsm.py:159-161] — Applied. Added validation for missing profile.fsm_bindings with warning; invalid state names now raise ValueError; object bindings supported via getattr().
+
+- [x] [Review][Patch] **Wait Timer Corruption Across State Transitions** [fishing_fsm.py:113-148] — Applied. Detect fresh entry to WAITING state and reset wait_started_at when transitioning from other states. Timer no longer corrupted on re-entry.
+
+- [x] [Review][Patch] **Halt Is Irreversible & Lacks Guard** [fishing_fsm.py:83] — Applied. Added idempotency guard in handle_halt() to detect and log duplicate halt attempts.
+
+- [x] [Review][Patch] **Negative Duration Action Parameter** [fishing_fsm.py:140-150] — Applied. Clamped remaining time to non-negative with `max(0.0, ...)` before calculating action duration.
+
+- [x] [Review][Patch] **Missing Future Import for PEP 604** [fishing_fsm.py:1] — Applied. Added `from __future__ import annotations` at top of file.
+
+- [x] [Review][Patch] **Exception Swallowing in Logging** [fishing_fsm.py:71-73, loop.py:160-162] — Applied. Distinguish recoverable vs fatal errors: (IOError, OSError, PermissionError) raise; others warn and continue.
+
+- [x] [Review][Patch] **Profile Object Binding Not Handled** [loop.py:107-109] — Applied. Added getattr() path for object-based bindings in addition to dict path.
+
+### Deferred
+
+- [x] [Review][Defer] **Timeout Action Ambiguity** — Deferred: Return value `Action(wait, 0.0)` ambiguous to caller. Design issue, defer to architecture review.
+- [x] [Review][Defer] **Floating Point Precision** — Deferred: Very small timeouts < 0.01s can timeout spuriously. Unlikely in production, defer to performance tuning phase.
+- [x] [Review][Defer] **Unused Profile Parameter** — Deferred: Constructor accepts profile but never uses it. Planned for future use.
 
 ## Notes
 

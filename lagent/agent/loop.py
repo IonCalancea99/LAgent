@@ -77,6 +77,81 @@ class AgentLoop:
             except Exception:
                 logger.exception("tick logging failed for %s", tick_id)
 
+    def _transition_state(self, from_state: str, action: Action | None) -> str:
+        """
+        Determine the next FSM state based on current state and FSM bindings.
+        
+        AC-1: After action is executed, check FSM bindings for next state.
+        If a next state is defined, transition to it for the next tick.
+        
+        Args:
+            from_state: Current FSM state
+            action: Action produced by state handler (used for decision logic)
+            
+        Returns:
+            Next state name (may be same as from_state if no binding exists)
+        """
+        fsm_bindings = {}
+        if self.profile is not None:
+            if isinstance(self.profile, dict):
+                fsm_bindings = self.profile.get("fsm_bindings", {})
+            else:
+                fsm_bindings = getattr(self.profile, "fsm_bindings", {})
+        
+        if not fsm_bindings:
+            logger.warning("AgentLoop: FSM bindings not found in profile; state transition disabled")
+            return from_state
+        
+        current_binding = fsm_bindings.get(from_state, {})
+        
+        # Handle both dict and object bindings
+        if isinstance(current_binding, dict):
+            next_state = current_binding.get("next")
+        else:
+            next_state = getattr(current_binding, "next", None)
+        
+        if next_state is not None:
+            # Validate next_state is in the valid set
+            valid_states = {"IDLE", "CASTING", "WAITING", "STOPPED"}
+            if next_state not in valid_states:
+                logger.error("AgentLoop: Invalid FSM state transition: %s → %s (not in valid states)", from_state, next_state)
+                return from_state
+            
+            logger.debug("FSM state transition: %s → %s", from_state, next_state)
+            if self.db is not None and self.session_id is not None:
+                try:
+                    self.db.append_event(
+                        self.session_id,
+                        "fsm",
+                        "state_transition",
+                        {"from": from_state, "to": next_state},
+                    )
+                except (IOError, OSError, PermissionError) as e:
+                    logger.critical("Unrecoverable state transition logging error: %s", e)
+                    raise
+                except Exception as e:
+                    logger.warning("Transient state transition logging error (continuing): %s", e)
+            return next_state
+        
+        return from_state
+
+    def request_halt(self) -> None:
+        """
+        Request FSM halt via callback (AC-3: Callback/Signal Handler integration).
+        
+        When the session layer detects a halt signal, it calls this method,
+        which propagates the halt to the FSM. The FSM will transition to STOPPED
+        and produce no further actions.
+        
+        Called by: session/orchestration layer when halt signal arrives
+        """
+        if self.state_handler is not None and hasattr(self.state_handler, "handle_halt"):
+            logger.info("AgentLoop: Halt requested; propagating to FSM")
+            try:
+                self.state_handler.handle_halt()
+            except Exception as e:
+                logger.exception("Error during FSM halt: %s", e)
+
     def tick(self) -> dict[str, Any]:
         """Execute one perception → policy → action loop iteration."""
         tick_id = self._next_tick_id()
@@ -149,6 +224,10 @@ class AgentLoop:
             except Exception:
                 logger.exception("HSL dispatch failed during tick %s", tick_id)
         self._task_done(self.policy_queue, result)
+
+        # AC-1: Transition to next FSM state based on FSM bindings
+        next_state = self._transition_state(self.state_name, action)
+        self.state_name = next_state
 
         elapsed_ms = (time.perf_counter() - started) * 1000
         payload = {

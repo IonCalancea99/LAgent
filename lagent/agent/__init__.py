@@ -14,6 +14,8 @@ from lagent.agent.startup import (
     StartupProfileResolver,
     scan_window,
 )
+from lagent.agent.fishing_fsm import FishingFSM
+from lagent.agent.loop import AgentLoop
 
 
 def main() -> None:

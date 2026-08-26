@@ -1,0 +1,34 @@
+name: fishing
+roi_positions:
+  health_bar: [100, 20, 300, 40]
+  mana_bar: [100, 45, 300, 65]
+  bite_indicator: [500, 300, 600, 400]
+fsm_bindings:
+  IDLE:
+    next: CASTING
+    cast_key: "2"
+    wait_timeout: 10.0
+  CASTING:
+    next: WAITING
+    cast_duration: 0.5
+  WAITING:
+    next: IDLE
+    wait_timeout: 10.0
+    timeout_action: return_to_idle
+skill_key_bindings:
+  cast: "2"
+  reel: "3"
+buff_timer_durations:
+  haste: 300.0
+confidence_thresholds:
+  default: 0.6
+  tension_indicator: 0.75
+confidence_threshold: 0.6
+bezier_offset_range: [15, 30]
+skill_timing:
+  default: {mean: 0.18, std: 0.05}
+  cast: {mean: 0.2, std: 0.08}
+  reel: {mean: 0.15, std: 0.05}
+enable_ocr: true
+enable_recording: false
+fatigue_interval: [1800.0, 3600.0]
