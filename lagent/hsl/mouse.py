@@ -6,7 +6,9 @@ import math
 import random
 import time
 from dataclasses import dataclass
-from typing import Callable, Protocol, Sequence
+from typing import Any, Callable, Protocol, Sequence
+
+from lagent.common.types import Action
 
 Point = tuple[float, float]
 OffsetRange = tuple[int, int]
@@ -15,6 +17,9 @@ OffsetRange = tuple[int, int]
 class MouseController(Protocol):
     def move(self, x: float, y: float) -> None:
         """Move the operating-system cursor to a point."""
+
+    def click(self, button: Any = "left", clicks: int = 1) -> None:
+        """Click a mouse button."""
 
 
 class KeyboardController(Protocol):
@@ -134,6 +139,8 @@ class HSL:
             "elapsed_since_increment": 0.0,
             "fatigue_interval": self._resolve_fatigue_interval(),
         }
+        self.cursor_position: Point = (0.0, 0.0)
+        self.last_override: dict[str, Any] | None = None
 
     def _get_profile_value(self, name: str, default: object) -> object:
         if self.profile is None:
@@ -174,6 +181,20 @@ class HSL:
         if maximum <= minimum:
             return float(minimum)
         return self.rng.uniform(minimum, maximum)
+
+    def _resolve_micro_drift_magnitude(self) -> OffsetRange:
+        raw_magnitude = self._get_profile_value("micro_drift_magnitude", (2, 8))
+        if isinstance(raw_magnitude, (str, bytes)):
+            raise ValueError("micro_drift_magnitude must contain two finite positive numbers")
+        try:
+            if len(raw_magnitude) != 2:
+                raise ValueError
+            values = tuple(float(value) for value in raw_magnitude)
+        except (TypeError, ValueError, OverflowError) as error:
+            raise ValueError("micro_drift_magnitude must contain two finite positive numbers") from error
+        if not all(math.isfinite(value) and value > 0 for value in values):
+            raise ValueError("micro_drift_magnitude must contain two finite positive numbers")
+        return tuple(sorted(int(value) for value in values))  # type: ignore[return-value]
 
     def _advance_fatigue(self, elapsed: float) -> None:
         if elapsed <= 0.0:
@@ -251,6 +272,98 @@ class HSL:
             raise RuntimeError("pynput is required for OS keyboard output") from error
         self.keyboard_controller = Controller()
         return self.keyboard_controller
+
+    def _click(self, button: str, clicks: int = 1) -> None:
+        controller = self._get_controller()
+        try:
+            from pynput.mouse import Button
+            button_value = getattr(Button, button)
+        except (ImportError, AttributeError):
+            button_value = button
+        controller.click(button_value, clicks=clicks)
+
+    def _log_override(self, session_id: str | None, sessions_db: Any, payload: dict[str, Any]) -> None:
+        if session_id is not None and sessions_db is not None:
+            sessions_db.append_event(session_id, "hsl", "override", payload)
+
+    def dispatch_action(self, action: Action | dict[str, Any], *, source: Sequence[float] | None = None,
+                        skill_id: str = "default", session_id: str | None = None,
+                        sessions_db: Any = None) -> Any:
+        """Dispatch every policy action through HSL before it reaches OS input."""
+        if isinstance(action, dict):
+            action = Action.model_validate(action)
+        action_source = self.cursor_position if source is None else (float(source[0]), float(source[1]))
+        protected = tuple(self._get_profile_value("protected_action_types", ("key_press", "wait")))
+        probability = float(self._get_profile_value("error_injection_probability", 0.0))
+        should_override = (
+            action.action_type == "mouse_click"
+            and action.action_type not in protected
+            and probability > 0.0
+            and self.rng.random() < probability
+            and action.x is not None
+            and action.y is not None
+        )
+        if should_override:
+            minimum, maximum = self._resolve_micro_drift_magnitude()
+            distance = self.rng.randint(minimum, maximum)
+            wrong_target = (action.x + self.rng.choice((-distance, distance)), action.y + self.rng.choice((-distance, distance)))
+            self.move_mouse(action_source, wrong_target)
+            self._click(action.button or "left", action.clicks or 1)
+            self.move_mouse(wrong_target, (action.x, action.y))
+            self._click(action.button or "left", action.clicks or 1)
+            self.last_override = {"action_type": action.action_type, "target": [action.x, action.y], "wrong_target": list(wrong_target)}
+            self._log_override(session_id, sessions_db, self.last_override)
+            self.cursor_position = (float(action.x), float(action.y))
+            return self.last_override
+
+        if action.action_type == "mouse_move":
+            if action.x is None or action.y is None:
+                raise ValueError("mouse_move requires x and y")
+            result = self.move_mouse(action_source, (action.x, action.y))
+            self.cursor_position = (float(action.x), float(action.y))
+            return result
+        if action.action_type == "mouse_click":
+            if action.x is not None and action.y is not None:
+                self.move_mouse(action_source, (action.x, action.y))
+                self.cursor_position = (float(action.x), float(action.y))
+            self._click(action.button or "left", action.clicks or 1)
+            return None
+        if action.action_type == "key_press":
+            if not action.key:
+                raise ValueError("key_press requires key")
+            return self.press_key(skill_id, action.key)
+        if action.action_type == "wait":
+            self._tick_fatigue()
+            delay = max(0.0, action.duration or 0.0) * self.fatigue_factor
+            if not self.break_active:
+                self.sleeper(delay)
+            return delay
+        raise ValueError(f"unsupported action type: {action.action_type}")
+
+    def dispatch_actions(self, actions: Sequence[Action | dict[str, Any]], **kwargs: Any) -> list[Any]:
+        """Dispatch a policy-produced sequence through this HSL instance."""
+        return [self.dispatch_action(action, **kwargs) for action in actions]
+
+    def idle(self, position: Sequence[float] | None = None, *, camera_drift: Callable[[], None] | None = None) -> bool:
+        """Apply one optional cursor/camera drift while the agent is idle."""
+        self._tick_fatigue()
+        if self.break_active:
+            return False
+        origin = self.cursor_position if position is None else (float(position[0]), float(position[1]))
+        drifted = bool(self._get_profile_value("micro_drift_enabled", False)) and self.rng.random() < float(self._get_profile_value("micro_drift_frequency", 0.05))
+        if drifted:
+            minimum, maximum = self._resolve_micro_drift_magnitude()
+            target = (origin[0] + self.rng.randint(minimum, maximum) * self.rng.choice((-1, 1)),
+                      origin[1] + self.rng.randint(minimum, maximum) * self.rng.choice((-1, 1)))
+            self.move_mouse(origin, target, samples=8, duration=0.08)
+            self.move_mouse(target, origin, samples=8, duration=0.08)
+            self.cursor_position = origin
+        if (bool(self._get_profile_value("camera_drift_enabled", False)) and camera_drift is not None
+                and self.rng.random() < float(self._get_profile_value("camera_drift_rate", 0.0))):
+            camera_drift()
+        return drifted
+
+    dispatch = dispatch_action
 
     def _sample_skill_delay(self, skill_id: str) -> float:
         if self.profile is None:

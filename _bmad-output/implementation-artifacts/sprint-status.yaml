@@ -65,7 +65,7 @@ development_status:
   3-1-bezier-mouse-path-generator: done
   3-2-keystroke-timing-noise: backlog
   3-3-fatigue-model: backlog
-  3-4-micro-drift-error-injection: backlog
+  3-4-micro-drift-error-injection: in-progress
   3-5-shadow-mode-full-hsl-shaping-without-os-output: backlog
   epic-3-retrospective: optional
   epic-4: backlog

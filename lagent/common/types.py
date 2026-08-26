@@ -156,6 +156,16 @@ class AgentProfile(BaseModel):
         default=(300.0, 900.0),
         description="Randomized break duration range in seconds",
     )
+    micro_drift_enabled: bool = Field(default=False, description="Enable idle cursor micro-drift")
+    micro_drift_frequency: float = Field(default=0.05, ge=0.0, le=1.0, description="Probability of drift per idle cycle")
+    micro_drift_magnitude: Tuple[int, int] = Field(default=(2, 8), description="Minimum and maximum drift offset in pixels")
+    camera_drift_enabled: bool = Field(default=False, description="Enable camera drift callback during idle cycles")
+    camera_drift_rate: float = Field(default=0.0, ge=0.0, le=1.0, description="Probability of camera drift per idle cycle")
+    error_injection_probability: float = Field(default=0.0, ge=0.0, le=1.0, description="Probability of an eligible click override")
+    protected_action_types: Tuple[str, ...] = Field(
+        default=("key_press", "wait"),
+        description="Action types that error injection must never alter",
+    )
     
     # Mode flags
     enable_ocr: bool = Field(default=True, description="Enable OCR processing")
