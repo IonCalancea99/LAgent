@@ -89,7 +89,7 @@ development_status:
   epic-7: in-progress
   7-1-recording-mode-dual-write-frame-capture-input-log: done
   7-2-auto-prelabeling-pipeline: backlog
-  7-3-model-training-atomic-deployment: backlog
+  7-3-model-training-atomic-deployment: done
   7-4-youtube-frame-ingestion: backlog
   epic-7-retrospective: optional
   epic-8: in-progress
