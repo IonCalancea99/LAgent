@@ -32,6 +32,7 @@ class AgentLoop:
         capture_latency_budget_ms: float = 200.0,
         capture: Any | None = None,
         inference: Any | None = None,
+        party_bus: Any | None = None,
     ) -> None:
         self.frame_queue = frame_queue
         self.policy_queue = policy_queue
@@ -44,6 +45,7 @@ class AgentLoop:
         self.capture_latency_budget_ms = capture_latency_budget_ms
         self.capture = capture
         self.inference = inference
+        self.party_bus = party_bus
         self._tick_counter = 0
 
     def _current_state_name(self) -> str:
@@ -149,6 +151,9 @@ class AgentLoop:
         
         Called by: session/orchestration layer when halt signal arrives
         """
+        if self.state_handler is not None and hasattr(self.state_handler, "pause_for_session_halt"):
+            self.request_session_halt("unknown", 0)
+            return
         if self.state_handler is not None and hasattr(self.state_handler, "handle_halt"):
             logger.info("AgentLoop: Halt requested; propagating to FSM")
             try:
@@ -156,10 +161,58 @@ class AgentLoop:
             except Exception as e:
                 logger.exception("Error during FSM halt: %s", e)
 
+    def request_session_halt(self, missed_agent_id: str, missed_count: int) -> None:
+        if self.state_handler is None or not hasattr(self.state_handler, "pause_for_session_halt"):
+            self.request_halt()
+            return
+        self.state_handler.pause_for_session_halt(missed_agent_id, missed_count)
+        self.state_name = "PAUSED"
+        for item_queue in (self.frame_queue, self.policy_queue):
+            while True:
+                try:
+                    item_queue.get_nowait()
+                except queue.Empty:
+                    break
+                item_queue.task_done()
+
+    def request_resume(self) -> None:
+        if self.state_handler is not None and hasattr(self.state_handler, "resume_session"):
+            self.state_handler.resume_session("operator_resume")
+            self.state_name = self.state_handler.state
+            return True
+        return False
+
+    def _poll_party_bus(self) -> None:
+        if self.party_bus is None:
+            return
+        try:
+            message = self.party_bus.receive(timeout=0.0)
+        except TimeoutError:
+            return
+        self.party_bus.handle_control(message, self)
+
+    def _publish_heartbeat(self) -> None:
+        if self.party_bus is not None:
+            self.party_bus.publish_heartbeat()
+
     def tick(self) -> dict[str, Any]:
         """Execute one perception → policy → action loop iteration."""
         tick_id = self._next_tick_id()
         started = time.perf_counter()
+        self._poll_party_bus()
+        self._publish_heartbeat()
+
+        if self.state_name == "PAUSED":
+            payload = {
+                "tick_id": tick_id,
+                "state": self.state_name,
+                "frame_count": 0,
+                "status": "paused",
+                "action": None,
+                "latency_ms": (time.perf_counter() - started) * 1000,
+            }
+            self._log_tick(tick_id, payload)
+            return payload
 
         frame = self._pop_frame()
         result = self._pop_policy_result()

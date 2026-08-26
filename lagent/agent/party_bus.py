@@ -70,6 +70,31 @@ class PartyBus:
     def publish_heartbeat(self) -> None:
         self._publish(MessageType.HEARTBEAT, {"heartbeat_timestamp": time.time()})
 
+    def publish_control(self, message_type: MessageType, payload: dict[str, Any]) -> None:
+        if message_type not in (MessageType.SESSION_HALT, MessageType.SESSION_RESUME):
+            raise ValueError("Only session halt and resume messages are control messages")
+        self._publish(message_type, payload)
+
+    def handle_control(self, message: dict[str, Any], agent_loop: Any) -> bool:
+        message_type = message.get("type")
+        payload = message.get("payload") or {}
+        if message_type == MessageType.SESSION_HALT:
+            if payload.get("session_id") != agent_loop.session_id:
+                return False
+            agent_loop.request_session_halt(payload.get("missed_agent_id", "unknown"), payload.get("missed_count", 0))
+            return True
+        if message_type == MessageType.SESSION_RESUME:
+            agent_ids = payload.get("agent_ids")
+            if (
+                payload.get("session_id") != agent_loop.session_id
+                or payload.get("reason") != "operator_resume"
+                or not isinstance(agent_ids, list)
+                or self.agent_id not in agent_ids
+            ):
+                return False
+            return agent_loop.request_resume()
+        return False
+
     def _publish(self, message_type: MessageType, payload: dict[str, Any]) -> None:
         if self.publisher is None:
             raise RuntimeError("Publisher has not started")

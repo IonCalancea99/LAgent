@@ -1,10 +1,19 @@
 """Orchestrator process entry point."""
 
 import logging
+import argparse
 import uuid
 from pathlib import Path
 
 from lagent.common.sessions_db import SessionsDB
+from lagent.agent.party_bus import PartyBus
+from lagent.common.transport import (
+    MessageType,
+    ORCHESTRATOR_CONTROL_ENDPOINT,
+    PROPHET_PARTY_ENDPOINT,
+    WARLORD_PARTY_ENDPOINT,
+)
+from lagent.orchestrator.heartbeat import HeartbeatMonitor
 
 
 def main():
@@ -16,7 +25,10 @@ def main():
     2. Logs startup event
     3. Manages session lifecycle for connected agents
     """
-    # Setup logging
+    parser = argparse.ArgumentParser(description="Start the LAgent orchestrator")
+    parser.add_argument("--session-id", default=None)
+    args = parser.parse_args()
+
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     logger = logging.getLogger(__name__)
     
@@ -28,7 +40,7 @@ def main():
         db = SessionsDB(str(db_path))
         
         # Create orchestrator session
-        session_id = f"orchestrator-{uuid.uuid4().hex[:8]}"
+        session_id = args.session_id or f"orchestrator-{uuid.uuid4().hex[:8]}"
         
         # Log orchestrator session start
         db.log_session_start(
@@ -59,8 +71,31 @@ def main():
             reason="Bootstrap complete"
         )
         
-        db.close()
+        party_bus = PartyBus("orchestrator", ORCHESTRATOR_CONTROL_ENDPOINT, session_db=db, session_id=session_id)
+        party_bus.start_publisher()
+        party_bus.subscribe(WARLORD_PARTY_ENDPOINT)
+        party_bus.subscribe(PROPHET_PARTY_ENDPOINT)
+        monitor = HeartbeatMonitor(
+            ("warlord", "prophet"),
+            session_id=session_id,
+            session_db=db,
+            control_publisher=lambda control: party_bus.publish_control(
+                MessageType(control["type"]), control["payload"]
+            ),
+        )
         logger.info("Orchestrator ready")
+        try:
+            while True:
+                try:
+                    monitor.observe_message(party_bus.receive(timeout=0.05))
+                except TimeoutError:
+                    pass
+                monitor.check()
+        except KeyboardInterrupt:
+            logger.info("Stopping orchestrator")
+        finally:
+            party_bus.close()
+            db.close()
         
     except Exception as e:
         logger.error("Failed to initialize orchestrator sessions database: %s", e)

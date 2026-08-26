@@ -13,6 +13,7 @@ from lagent.common import PerceptionResult
 GPU_ENDPOINT = "tcp://127.0.0.1:5555"
 WARLORD_PARTY_ENDPOINT = "tcp://127.0.0.1:5556"
 PROPHET_PARTY_ENDPOINT = "tcp://127.0.0.1:5557"
+ORCHESTRATOR_CONTROL_ENDPOINT = "tcp://127.0.0.1:5558"
 HEARTBEAT_INTERVAL = 1.0
 HEARTBEAT_MISSED_COUNT = 3
 
@@ -20,6 +21,8 @@ HEARTBEAT_MISSED_COUNT = 3
 class MessageType(StrEnum):
     PARTY_STATE = "party_state"
     HEARTBEAT = "heartbeat"
+    SESSION_HALT = "session_halt"
+    SESSION_RESUME = "session_resume"
 
 
 def make_endpoint() -> str:

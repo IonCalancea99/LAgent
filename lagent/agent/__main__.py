@@ -11,8 +11,14 @@ from lagent.agent.capture import CaptureThread
 from lagent.agent.inference import InferenceClient, PolicyQueue
 from lagent.agent.loop import AgentLoop
 from lagent.agent.fishing_fsm import FishingFSM
+from lagent.agent.party_bus import PartyBus
 from lagent.agent.startup import StartupProfileResolver, scan_window
 from lagent.common.transport import GPU_ENDPOINT
+from lagent.common.transport import (
+    ORCHESTRATOR_CONTROL_ENDPOINT,
+    PROPHET_PARTY_ENDPOINT,
+    WARLORD_PARTY_ENDPOINT,
+)
 from lagent.common.sessions_db import SessionsDB
 from lagent.hsl import HSL
 
@@ -118,6 +124,22 @@ def main() -> None:
             )
         
         if args.debug or sys.stdin.isatty():
+            party_endpoints = {
+                "warlord": WARLORD_PARTY_ENDPOINT,
+                "prophet": PROPHET_PARTY_ENDPOINT,
+            }
+            party_bus = PartyBus(
+                selected_class,
+                party_endpoints.get(selected_class),
+                session_db=db,
+                session_id=session_id,
+            )
+            if party_bus.publisher_endpoint is not None:
+                party_bus.start_publisher()
+            for endpoint in party_endpoints.values():
+                if endpoint != party_bus.publisher_endpoint:
+                    party_bus.subscribe(endpoint)
+            party_bus.subscribe(ORCHESTRATOR_CONTROL_ENDPOINT)
             capture = CaptureThread(args.window_title, fps=args.fps)
             policy_queue = PolicyQueue(maxsize=2)
             inference = InferenceClient(
@@ -149,6 +171,7 @@ def main() -> None:
                 db=db,
                 capture=capture,
                 inference=inference,
+                party_bus=party_bus,
             )
             logger.info("Agent control loop started for %s", args.window_title)
             try:
@@ -157,6 +180,7 @@ def main() -> None:
                 logger.info("Stopping agent control loop")
             finally:
                 db.close()
+                party_bus.close()
         else:
             db.close()
         

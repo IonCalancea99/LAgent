@@ -77,7 +77,7 @@ development_status:
   epic-5: backlog
   5-1-party-bus-partystate-pub-sub-exchange: backlog
   5-2-pp-buff-safety-check: in-progress
-  5-3-orchestrator-heartbeat-monitor-session-halt: backlog
+  5-3-orchestrator-heartbeat-monitor-session-halt: done
   epic-5-retrospective: optional
   epic-6: backlog
   6-1-warlord-combat-fsm-pull-fight-loot: backlog

@@ -77,6 +77,8 @@ class FishingFSM:
         self.state = "IDLE"
         self.wait_started_at: Optional[float] = None
         self.halted = False
+        self.paused = False
+        self._paused_state: Optional[str] = None
         self.next_state: Optional[str] = None
 
     def _tension_detection(self, result: PerceptionResult) -> Any | None:
@@ -118,6 +120,28 @@ class FishingFSM:
         self.halted = True
         self.state = "STOPPED"
 
+    def pause_for_session_halt(self, missed_agent_id: str, missed_count: int) -> None:
+        if self.paused:
+            return
+        self._paused_state = self.state
+        self.paused = True
+        self.halted = True
+        self.wait_started_at = None
+        self.state = "PAUSED"
+        self._log_event(
+            "session_halt",
+            {"reason": "heartbeat_missed", "missed_agent_id": missed_agent_id, "missed_count": missed_count},
+        )
+
+    def resume_session(self, reason: str = "operator_resume") -> None:
+        if not self.paused or reason != "operator_resume":
+            return
+        self.state = self._paused_state or "IDLE"
+        self._paused_state = None
+        self.paused = False
+        self.halted = False
+        self._log_event("session_resume", {"reason": reason})
+
     def __call__(self, result: PerceptionResult, state_name: str) -> Action | None:
         """
         FSM state handler: Process perception and return action.
@@ -135,7 +159,7 @@ class FishingFSM:
         self.state = state_name
         
         # AC-3: If halted, produce no further input
-        if self.halted or state_name == "STOPPED":
+        if self.paused or self.halted or state_name in ("STOPPED", "PAUSED"):
             logger.debug("FSM in STOPPED state; no action produced")
             return None
 
