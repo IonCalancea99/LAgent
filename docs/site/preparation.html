@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Preparation &amp; Configuration · LAgent Docs</title>
+<link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+<header class="topbar">
+  <button id="navToggle" aria-label="Toggle navigation">☰</button>
+  <div class="brand">🤖 LAgent Docs</div>
+  <div class="search-wrap">
+    <input id="searchInput" type="text" placeholder="Search docs…" autocomplete="off" />
+    <div id="searchResults" class="search-results"></div>
+  </div>
+  <button id="themeToggle" aria-label="Toggle theme">🌓</button>
+</header>
+
+<div class="layout">
+  <nav id="sidebar" class="sidebar"></nav>
+
+  <main class="content">
+    <h1>Preparation &amp; Configuration</h1>
+    <p>Once the package is installed, LAgent needs a few things in place before the first
+      session: a working directory layout, valid YAML agent profiles, and trained model
+      weights. This page covers all of it.</p>
+
+    <h2 id="directories">Directory structure to prepare</h2>
+    <p>These directories are structural seeds — they must exist even though some are excluded
+      from source control:</p>
+    <pre><code>LAgent/
+├── data/                 # sessions.db (WAL-mode SQLite) lives here
+├── recordings/           # Recording Mode output + ingested YouTube frames
+├── models/
+│   ├── common/current.pt   # class-agnostic YOLO model
+│   ├── warlord/current.pt  # Warlord-specific YOLO model
+│   └── prophet/current.pt  # Prophet-specific YOLO model
+└── profiles/
+    ├── fishing.yaml
+    ├── warlord.yaml
+    └── prophet.yaml</code></pre>
+    <p>Create any missing directories before your first run:</p>
+    <pre><code>mkdir -p data recordings models/common models/warlord models/prophet</code></pre>
+
+    <h2 id="profiles">Agent profiles (YAML)</h2>
+    <p>Each character class (and the Fishing proof-of-concept) is driven entirely by a YAML
+      profile — there is no hardcoded behavior per class. Profiles live in <code>profiles/</code>
+      and are loaded and validated by a Pydantic v2 schema (<code>AgentProfile</code>) at
+      startup.</p>
+    <p>Required top-level fields (enforced by <code>lagent.agent.profile</code>):</p>
+    <table>
+      <thead><tr><th>Field</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td><code>name</code></td><td>Profile identifier (e.g. <code>fishing</code>, <code>warlord</code>, <code>prophet</code>)</td></tr>
+        <tr><td><code>roi_positions</code></td><td>Named regions of interest as <code>[x1, y1, x2, y2]</code> pixel rectangles (HP bar, MP bar, buff icons, etc.)</td></tr>
+        <tr><td><code>fsm_bindings</code></td><td>FSM state transitions, timeouts, and per-state behavior parameters</td></tr>
+        <tr><td><code>skill_key_bindings</code></td><td>Logical action name → keyboard key mapping</td></tr>
+        <tr><td><code>buff_timer_durations</code></td><td>Seconds each buff lasts, used to schedule re-casts</td></tr>
+        <tr><td><code>confidence_thresholds</code></td><td>Per-class YOLO detection confidence cutoffs (plus a <code>default</code>)</td></tr>
+        <tr><td><code>skill_timing</code></td><td>Per-skill Gaussian <code>{mean, std}</code> timing used for human-like keystroke delays</td></tr>
+      </tbody>
+    </table>
+
+    <p>Example — the bundled <code>profiles/fishing.yaml</code>:</p>
+    <pre><code>name: fishing
+roi_positions:
+  health_bar: [100, 20, 300, 40]
+  mana_bar: [100, 45, 300, 65]
+  bite_indicator: [500, 300, 600, 400]
+fsm_bindings:
+  IDLE:
+    next: CASTING
+    cast_key: "2"
+    wait_timeout: 10.0
+  CASTING:
+    next: WAITING
+    cast_duration: 0.5
+  WAITING:
+    next: IDLE
+    wait_timeout: 10.0
+    timeout_action: return_to_idle
+    tension_class: tension_indicator
+    tension_confidence_threshold: 0.80
+  REELING:
+    next: IDLE
+    reel_key: "3"
+skill_key_bindings:
+  cast: "2"
+  reel: "3"
+buff_timer_durations:
+  haste: 300.0
+confidence_thresholds:
+  default: 0.6
+  tension_indicator: 0.80
+bezier_offset_range: [15, 30]
+skill_timing:
+  default: {mean: 0.18, std: 0.05}
+  cast: {mean: 0.2, std: 0.08}
+  reel: {mean: 0.15, std: 0.05}
+enable_ocr: true
+enable_recording: false
+fatigue_interval: [1800.0, 3600.0]</code></pre>
+
+    <p>Use <code>profiles/warlord.yaml</code> and <code>profiles/prophet.yaml</code> as the
+      starting points for the combat classes — copy and adjust ROI pixel coordinates to match
+      your own screen resolution and UI layout before first use.</p>
+
+    <h2 id="validation">Profile validation (fail-fast)</h2>
+    <div class="callout warn">
+      <strong class="callout-title">No silent fallback</strong>
+      An invalid or incomplete profile raises a <code>ProfileValidationError</code>
+      (or a Pydantic <code>ValidationError</code>) at startup, before any session begins.
+      There is no runtime fallback to defaults — fix the YAML and restart.
+    </div>
+    <p>Common validation rules worth knowing while editing a profile:</p>
+    <ul>
+      <li>Every ROI rectangle must satisfy <code>x2 &gt; x1</code> and <code>y2 &gt; y1</code>, with non-negative coordinates.</li>
+      <li>ROI rectangles must fit inside the captured frame's actual width/height.</li>
+      <li>All seven required top-level fields listed above must be present.</li>
+    </ul>
+
+    <h2 id="sessions-db">Sessions database</h2>
+    <p>All processes (agents, orchestrator, UI) append events to a single WAL-mode SQLite
+      database at <code>data/sessions.db</code>, each from its own connection:</p>
+    <ul>
+      <li><code>sessions(session_id, started_at, profile, mode)</code></li>
+      <li><code>events(id, session_id, ts, source, type, payload_json)</code></li>
+    </ul>
+    <p>The database file is created automatically on first run as long as the parent
+      <code>data/</code> directory exists — no manual schema setup is required.</p>
+
+    <h2 id="models">Model files</h2>
+    <p>The GPU Inference Server loads YOLO weights from <code>models/&lt;class&gt;/current.pt</code>
+      once at startup (no in-session reload). Two ways to get a <code>current.pt</code> in place:</p>
+    <ol>
+      <li><strong>Bring your own weights</strong> — place a compatible <code>.pt</code> file at
+        <code>models/common/current.pt</code>, <code>models/warlord/current.pt</code>, and/or
+        <code>models/prophet/current.pt</code>.</li>
+      <li><strong>Train your own</strong> — follow the <a href="training.html">Training Pipeline</a>
+        guide (record → prelabel → train); the pipeline writes <code>current.pt</code> atomically
+        via a temp-write + <code>os.replace()</code> once a model passes its mAP threshold.</li>
+    </ol>
+    <div class="callout info">
+      <strong class="callout-title">No model file yet?</strong>
+      A session can still be started for development/debugging purposes, but real detection
+      and OCR quality depend entirely on having a trained <code>current.pt</code> per class.
+    </div>
+
+    <h2 id="checklist">Pre-flight checklist</h2>
+    <ul class="checklist">
+      <li>Virtual environment created and package installed (see <a href="installation.html">Installation</a>)</li>
+      <li><code>data/</code>, <code>recordings/</code>, and <code>models/&lt;class&gt;/</code> directories exist</li>
+      <li><code>profiles/&lt;class&gt;.yaml</code> exists and passes validation for every class you plan to run</li>
+      <li>ROI pixel coordinates in each profile match your actual game window resolution/layout</li>
+      <li><code>models/&lt;class&gt;/current.pt</code> is present for every class you plan to run</li>
+      <li>No training run is active on the same machine (GPU must be free for the live session)</li>
+      <li>Game client window is open and titled as expected (default: <code>Lineage II</code>)</li>
+    </ul>
+
+    <div class="page-nav"></div>
+  </main>
+
+  <aside id="toc" class="toc"></aside>
+</div>
+
+<script src="assets/search-index.js"></script>
+<script src="assets/app.js" data-page="preparation"></script>
+</body>
+</html>

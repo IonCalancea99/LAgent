@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Running LAgent · LAgent Docs</title>
+<link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+<header class="topbar">
+  <button id="navToggle" aria-label="Toggle navigation">☰</button>
+  <div class="brand">🤖 LAgent Docs</div>
+  <div class="search-wrap">
+    <input id="searchInput" type="text" placeholder="Search docs…" autocomplete="off" />
+    <div id="searchResults" class="search-results"></div>
+  </div>
+  <button id="themeToggle" aria-label="Toggle theme">🌓</button>
+</header>
+
+<div class="layout">
+  <nav id="sidebar" class="sidebar"></nav>
+
+  <main class="content">
+    <h1>Running LAgent</h1>
+    <p>LAgent is normally operated entirely through the system tray icon. This page also
+      documents the manual per-process commands, which are useful for development and
+      debugging.</p>
+
+    <h2 id="tray-ui">Launching via the tray/UI (normal usage)</h2>
+    <p>The Tray/UI process is the sole launcher of every other runtime process. Start it with:</p>
+    <pre><code>python -m lagent.ui</code></pre>
+    <p>or, after installation, the console script:</p>
+    <pre><code>lagent-ui</code></pre>
+    <p>No main window or taskbar entry appears — the tray icon in the notification area is the
+      entire control surface. Left as-is, LAgent does nothing until you start a session from the
+      tray menu.</p>
+
+    <h2 id="tray-menu">Tray menu actions</h2>
+    <div class="cards">
+      <div class="card"><h3>Start Session</h3><p>Submenu to pick a profile: Fishing / Combat (Warlord + Prophet) / Shadow. Spawns the Orchestrator, GPU Inference Server, and Agent process(es).</p></div>
+      <div class="card"><h3>Stop Session</h3><p>Signals a clean shutdown of all spawned child processes.</p></div>
+      <div class="card"><h3>Recording Mode toggle</h3><p>Switches capture threads to dual-write mode and activates the input listener for training-data collection.</p></div>
+      <div class="card"><h3>Open Status Overlay</h3><p>Shows the always-on-top per-agent status window.</p></div>
+      <div class="card"><h3>Exit</h3><p>Stops any active session and closes the tray application.</p></div>
+    </div>
+
+    <h2 id="manual-launch">Manual process launch (advanced / development)</h2>
+    <div class="callout warn">
+      <strong class="callout-title">Development use only</strong>
+      In normal operation, never start the Orchestrator, GPU Inference Server, or Agent
+      processes directly — the Tray/UI is the designated launcher (AD-5) and manages process
+      lifecycle, timeouts, and cleanup. Manual launches below are for debugging one component
+      in isolation.
+    </div>
+    <p>Each process can also be started standalone for debugging:</p>
+    <pre><code># GPU Inference Server — owns all YOLO/EasyOCR/CUDA calls
+python -m lagent.gpu_server
+
+# Party Orchestrator — relays party state, monitors heartbeats
+python -m lagent.orchestrator [--session-id SESSION_ID]
+
+# Agent — one process per character window
+python -m lagent.agent --class warlord --window-title "Lineage II"
+python -m lagent.agent --class prophet --window-title "Lineage II - 2"</code></pre>
+    <p>Console-script equivalents installed by <code>pyproject.toml</code>:</p>
+    <pre><code>lagent-gpu-server
+lagent-orchestrator
+lagent-agent
+lagent-ui</code></pre>
+
+    <h2 id="agent-cli">Agent CLI options</h2>
+    <table>
+      <thead><tr><th>Flag</th><th>Default</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>--class {warlord,prophet,fishing}</code></td><td>—</td><td>Which agent profile to load</td></tr>
+        <tr><td><code>--session-id</code></td><td>auto-generated</td><td>Correlates events in <code>data/sessions.db</code></td></tr>
+        <tr><td><code>--record</code></td><td>off</td><td>Recording Mode: dual-write frames + pynput input log (mutually exclusive with <code>--shadow</code>)</td></tr>
+        <tr><td><code>--shadow</code></td><td>off</td><td>Shadow Mode: shape and log actions but never send real OS input (mutually exclusive with <code>--record</code>)</td></tr>
+        <tr><td><code>--debug</code></td><td>off</td><td>Runs the live capture + inference debug pipeline</td></tr>
+        <tr><td><code>--window-title</code></td><td><code>Lineage II</code></td><td>Title of the game window to capture</td></tr>
+        <tr><td><code>--gpu-endpoint</code></td><td>project default endpoint</td><td>ZeroMQ endpoint of the GPU Inference Server</td></tr>
+        <tr><td><code>--fps</code></td><td><code>10</code></td><td>Capture and inference rate</td></tr>
+      </tbody>
+    </table>
+    <p>If startup character identification is inconclusive, the agent prompts on the console for
+      manual confirmation (<code>warlord</code>/<code>prophet</code>) rather than guessing silently.</p>
+
+    <h2 id="modes">Operating modes</h2>
+    <table>
+      <thead><tr><th>Mode</th><th>How to enable</th><th>Behavior</th></tr></thead>
+      <tbody>
+        <tr><td>Active session</td><td>default (no <code>--record</code>/<code>--shadow</code>)</td><td>Full perception → decision → action loop with real simulated input</td></tr>
+        <tr><td>Shadow Mode</td><td><code>--shadow</code>, or tray profile submenu</td><td>All actions are shaped and logged through the HSL, but OS input calls are suppressed — safe for validating behavior against a live client without acting; cannot be toggled mid-session</td></tr>
+        <tr><td>Recording Mode</td><td><code>--record</code>, or tray "Recording Mode" toggle</td><td>Captures frames and your own keyboard/mouse input simultaneously for later training; mutually exclusive with a live session at launch</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="status-overlay">Status overlay &amp; monitoring</h2>
+    <p>The always-on-top, semi-transparent status overlay (PyQt6, native Windows styling) shows,
+      per agent: current FSM state label, HP% bar, MP% bar, and session timer. Toggle it from
+      the tray menu or its hotkey. It is intentionally lightweight — no heavy rendering runs on
+      the live session's critical path.</p>
+
+    <h2 id="stopping">Stopping a session</h2>
+    <p>A session ends in one of three ways:</p>
+    <ul>
+      <li><strong>Manual stop</strong> — "Stop Session" from the tray menu.</li>
+      <li><strong>Session cap reached</strong> — configurable max duration (default 4–6 hours); LAgent returns both characters to a safe location, runs a final Prophet buff cycle, and waits for both characters to be idle before halting input — even mid-combat-cycle.</li>
+      <li><strong>Health failure</strong> — if the Orchestrator misses a configurable number of consecutive heartbeats (default 3) from either agent, the session halts and the failure is logged and surfaced on next launch.</li>
+    </ul>
+
+    <div class="page-nav"></div>
+  </main>
+
+  <aside id="toc" class="toc"></aside>
+</div>
+
+<script src="assets/search-index.js"></script>
+<script src="assets/app.js" data-page="running"></script>
+</body>
+</html>

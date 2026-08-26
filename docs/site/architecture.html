@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Architecture · LAgent Docs</title>
+<link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+<header class="topbar">
+  <button id="navToggle" aria-label="Toggle navigation">☰</button>
+  <div class="brand">🤖 LAgent Docs</div>
+  <div class="search-wrap">
+    <input id="searchInput" type="text" placeholder="Search docs…" autocomplete="off" />
+    <div id="searchResults" class="search-results"></div>
+  </div>
+  <button id="themeToggle" aria-label="Toggle theme">🌓</button>
+</header>
+
+<div class="layout">
+  <nav id="sidebar" class="sidebar"></nav>
+
+  <main class="content">
+    <h1>Architecture</h1>
+    <p>LAgent follows an <strong>actor model with a pipes-and-filters inner loop</strong>: every
+      runtime entity is an autonomous OS process with no shared memory, and all cross-process
+      coupling goes through ZeroMQ messages.</p>
+
+    <h2 id="actors">Processes at a glance</h2>
+    <div class="diagram">
+      <div class="flow-col">
+        <div class="node">Tray / UI</div>
+      </div>
+      <span class="arrow">⇄</span>
+      <div class="flow-col">
+        <div class="node">Warlord Agent</div>
+        <span class="arrow">⇅</span>
+        <div class="node">Prophet Agent</div>
+      </div>
+      <span class="arrow">⇄</span>
+      <div class="flow-col">
+        <div class="node">GPU Inference Server</div>
+      </div>
+      <span class="arrow">⇄</span>
+      <div class="flow-col">
+        <div class="node">Party Orchestrator</div>
+      </div>
+    </div>
+    <p style="text-align:center; color:var(--text-muted); font-size:0.85rem; margin-top:-1em;">
+      Tray/UI spawns and terminates every other process. Agents exchange party state directly
+      (PUB/SUB); the Orchestrator only observes heartbeats and relays party events.
+    </p>
+
+    <table>
+      <thead><tr><th>Process</th><th>Responsibility</th></tr></thead>
+      <tbody>
+        <tr><td>Tray / UI (<code>lagent.ui</code>)</td><td>Sole process launcher; system tray + status overlay; never imports agent/hsl/gpu_server modules</td></tr>
+        <tr><td>Warlord / Prophet Agent (<code>lagent.agent</code>)</td><td>Owns capture → inference-request → FSM/policy → HSL → OS input for one character window</td></tr>
+        <tr><td>GPU Inference Server (<code>lagent.gpu_server</code>)</td><td>Sole owner of all YOLO + EasyOCR + CUDA calls; serves both agents over DEALER/ROUTER</td></tr>
+        <tr><td>Party Orchestrator (<code>lagent.orchestrator</code>)</td><td>Relays Party Bus state between agents, monitors heartbeats, triggers session halt on health failure</td></tr>
+        <tr><td>Training Pipeline (<code>lagent.train</code>, offline CLI)</td><td>Record → prelabel → train → atomic deploy; never runs concurrently with a live session</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="pipeline">Per-agent inner loop (pipes-and-filters)</h2>
+    <div class="pipeline">
+      <div class="step">Capture thread (~10 FPS)</div>
+      <span class="sep">→</span>
+      <div class="step">ROI extraction</div>
+      <span class="sep">→</span>
+      <div class="step">GPU inference request (DEALER)</div>
+      <span class="sep">→</span>
+      <div class="step">PerceptionResult</div>
+      <span class="sep">→</span>
+      <div class="step">FSM + BC policy</div>
+      <span class="sep">→</span>
+      <div class="step">Human Simulation Layer</div>
+      <span class="sep">→</span>
+      <div class="step">Simulated OS input</div>
+    </div>
+    <p>Every bounded internal queue (capture→inference, inference→policy) uses oldest-frame
+      eviction with a max depth of 2 frames per stage — a slow GPU tick never blocks the
+      capture thread.</p>
+
+    <h2 id="invariants">Key architectural invariants</h2>
+    <p>Condensed from the project's Architecture Spine (<code>AD-1</code>…<code>AD-13</code>):</p>
+    <table>
+      <thead><tr><th>ID</th><th>Rule</th></tr></thead>
+      <tbody>
+        <tr><td>AD-1</td><td>All cross-process communication is ZeroMQ; no shared memory, no filesystem polling</td></tr>
+        <tr><td>AD-2</td><td>Only the GPU Inference Server loads models or issues CUDA calls</td></tr>
+        <tr><td>AD-3</td><td>Internal queues use oldest-frame eviction; capture thread never blocks</td></tr>
+        <tr><td>AD-4</td><td>Each Agent owns its own <code>GameState</code>; only the <code>PartyState</code> subset crosses process boundaries</td></tr>
+        <tr><td>AD-5</td><td>Tray/UI is the sole launcher of every runtime child process</td></tr>
+        <tr><td>AD-6</td><td>Training Pipeline is a separate CLI; never co-runs with a live session</td></tr>
+        <tr><td>AD-7</td><td>Model versioning via atomic <code>current.pt</code> path swap; loaded at server startup only</td></tr>
+        <tr><td>AD-8</td><td>HSL is a per-agent instance (fatigue/timing state never global); Shadow Mode lives inside HSL</td></tr>
+        <tr><td>AD-9</td><td>Single WAL-mode SQLite <code>sessions.db</code>; one connection per process</td></tr>
+        <tr><td>AD-10</td><td>OCR runs only in the GPU Inference Server; agents never touch pixels directly</td></tr>
+        <tr><td>AD-10b</td><td>All spatial/proximity math uses frame-pixel coordinates — no game-world coordinate system</td></tr>
+        <tr><td>AD-11</td><td>Fixed ZeroMQ patterns: Agent↔GPU is DEALER/ROUTER, Party Bus is PUB/SUB; no REQ/REP anywhere</td></tr>
+        <tr><td>AD-12</td><td><code>lagent.common</code> is the only shared import; processes never import each other</td></tr>
+        <tr><td>AD-13</td><td>Recording Mode (<code>--record</code>) is mutually exclusive with live Session Mode at process launch</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="import-graph">Allowed import graph</h2>
+    <pre><code>lagent.common  →  lagent.hsl     →  lagent.agent (warlord / prophet)
+lagent.common  →  lagent.agent
+lagent.common  →  lagent.gpu_server
+lagent.common  →  lagent.train      (types only)
+lagent.common  →  lagent.ui</code></pre>
+    <p><code>lagent.common</code> holds every shared type: <code>GameState</code>,
+      <code>PartyState</code>, <code>PerceptionResult</code>, <code>Action</code>,
+      <code>AgentProfile</code>. No module may add a reverse or cross edge to this graph.</p>
+
+    <h2 id="stack">Tech stack</h2>
+    <table>
+      <thead><tr><th>Concern</th><th>Library</th></tr></thead>
+      <tbody>
+        <tr><td>Config validation</td><td>Pydantic v2 + PyYAML</td></tr>
+        <tr><td>Inter-process messaging</td><td>PyZMQ (ZeroMQ)</td></tr>
+        <tr><td>Structured logging</td><td>structlog</td></tr>
+        <tr><td>Object/state detection</td><td>Ultralytics YOLO</td></tr>
+        <tr><td>Numeric OCR</td><td>EasyOCR</td></tr>
+        <tr><td>Experiment tracking</td><td>MLflow (local)</td></tr>
+        <tr><td>Screen capture</td><td>dxcam (Windows), mss (fallback/cross-platform)</td></tr>
+        <tr><td>Input simulation</td><td>pynput, pywin32 (Windows)</td></tr>
+        <tr><td>Tray / overlay UI</td><td>pystray, PyQt6</td></tr>
+        <tr><td>Video ingestion</td><td>yt-dlp, OpenCV, Pillow</td></tr>
+        <tr><td>Persistence</td><td>SQLite (WAL mode)</td></tr>
+      </tbody>
+    </table>
+
+    <div class="page-nav"></div>
+  </main>
+
+  <aside id="toc" class="toc"></aside>
+</div>
+
+<script src="assets/search-index.js"></script>
+<script src="assets/app.js" data-page="architecture"></script>
+</body>
+</html>

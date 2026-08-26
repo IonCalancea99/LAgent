@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Installation · LAgent Docs</title>
+<link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+<header class="topbar">
+  <button id="navToggle" aria-label="Toggle navigation">☰</button>
+  <div class="brand">🤖 LAgent Docs</div>
+  <div class="search-wrap">
+    <input id="searchInput" type="text" placeholder="Search docs…" autocomplete="off" />
+    <div id="searchResults" class="search-results"></div>
+  </div>
+  <button id="themeToggle" aria-label="Toggle theme">🌓</button>
+</header>
+
+<div class="layout">
+  <nav id="sidebar" class="sidebar"></nav>
+
+  <main class="content">
+    <h1>Installation</h1>
+    <p>These steps get the <code>lagent</code> package and its dependencies installed in an
+      isolated environment. Follow them in order — most historical setup failures in this
+      project came from skipping the virtual environment step.</p>
+
+    <h2 id="prerequisites">Prerequisites</h2>
+    <table>
+      <thead><tr><th>Item</th><th>Details</th></tr></thead>
+      <tbody>
+        <tr><td>Python</td><td>3.12.x (<code>requires-python = "&gt;=3.12"</code> in <code>pyproject.toml</code>)</td></tr>
+        <tr><td>Package manager</td><td><code>pip</code> inside a project-local virtual environment</td></tr>
+        <tr><td>OS for full runtime</td><td>Windows (needed for <code>dxcam</code> screen capture, <code>pynput</code> input, <code>pywin32</code>)</td></tr>
+        <tr><td>OS for dev/test only</td><td>macOS / Linux — install the cross-platform subset and run <code>pytest</code></td></tr>
+        <tr><td>GPU driver</td><td>NVIDIA CUDA-capable driver if you intend to run real inference/training locally</td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout warn">
+      <strong class="callout-title">Never install into the system Python</strong>
+      macOS ships a PEP 668 "externally-managed-environment" guard. Do not use
+      <code>--break-system-packages</code> or install project dependencies system-wide. Always
+      work inside the project's own virtual environment (<code>.venv</code>).
+    </div>
+
+    <h2 id="create-venv">1. Create and activate a virtual environment</h2>
+    <pre><code>cd /path/to/LAgent
+python3.12 -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
+python -m pip install -U pip</code></pre>
+    <p>Confirm the venv's interpreter is active before continuing:</p>
+    <pre><code>which python      # should point inside .venv
+python --version  # should report 3.12.x</code></pre>
+
+    <h2 id="install-package">2. Install the package</h2>
+    <p>Install in editable mode so code changes are picked up immediately:</p>
+    <pre><code>python -m pip install -e .</code></pre>
+    <p>For development (tests, linting, formatting), install the optional <code>dev</code> extras:</p>
+    <pre><code>python -m pip install -e ".[dev]"</code></pre>
+    <p>This pulls in <code>pytest</code>, <code>pytest-cov</code>, <code>black</code>, and <code>ruff</code> in addition to the runtime dependencies declared in <code>pyproject.toml</code> (Pydantic, PyYAML, PyZMQ, structlog, Ultralytics YOLO, MLflow, Pillow, yt-dlp, OpenCV, EasyOCR, dxcam, mss, pynput, pystray, PyQt6).</p>
+
+    <h2 id="platform-deps">3. Platform-specific dependencies</h2>
+    <p>A few dependencies are intentionally platform-restricted. This is expected behavior, not a broken install:</p>
+    <table>
+      <thead><tr><th>Package</th><th>Platform</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td><code>dxcam</code></td><td>Windows only</td><td>Low-latency per-window screen capture</td></tr>
+        <tr><td><code>pynput</code></td><td>Cross-platform, but only meaningful for live input simulation on the target Windows client</td><td>Mouse/keyboard simulation and Recording Mode input capture</td></tr>
+        <tr><td><code>pywin32</code></td><td><code>sys_platform == 'win32'</code> only</td><td>Windows API access</td></tr>
+        <tr><td><code>mss</code>, <code>opencv-python</code>, <code>easyocr</code>, <code>ultralytics</code></td><td>Cross-platform</td><td>Fallback capture, image processing, OCR, YOLO</td></tr>
+      </tbody>
+    </table>
+    <div class="callout info">
+      <strong class="callout-title">Working on macOS/Linux</strong>
+      You can install and run everything except the Windows-only pieces, and the full test
+      suite runs on the cross-platform subset (this mirrors what the project's
+      <code>Dockerfile</code> does — see below). Live capture and simulated input against the
+      real game client require Windows.
+    </div>
+
+    <h2 id="docker">4. Alternative: Docker-based setup</h2>
+    <p>The repository ships a <code>Dockerfile</code> that builds a minimal, reproducible test
+      image without the platform-specific packages:</p>
+    <pre><code>docker build -t lagent-test .
+docker run --rm lagent-test</code></pre>
+    <p>This installs only the cross-platform runtime dependencies plus <code>pytest</code>, then
+      runs the test suite (<code>python -m pytest tests/ -v</code>) as the container's default
+      command. Use this path for repeatable CI-like validation instead of ad hoc local
+      <code>pip</code> attempts.</p>
+
+    <h2 id="verify">5. Verify the installation</h2>
+    <p>Run the test suite from inside the activated virtual environment:</p>
+    <pre><code>PYTHONPATH=. python -m pytest -q</code></pre>
+    <p>A clean pass confirms the interpreter, package install, and import graph are all
+      consistent. If you see missing-module errors, double-check that:</p>
+    <ul class="checklist">
+      <li>The active interpreter is <code>.venv</code>'s Python, not the system one</li>
+      <li>You ran <code>pip install -e .</code> (or <code>.[dev]</code>) after activating the venv</li>
+      <li>You are not trying to install a Windows-only package on macOS/Linux</li>
+    </ul>
+    <p>See <a href="troubleshooting.html">Troubleshooting</a> for the full list of known failure patterns and fixes.</p>
+
+    <div class="page-nav"></div>
+  </main>
+
+  <aside id="toc" class="toc"></aside>
+</div>
+
+<script src="assets/search-index.js"></script>
+<script src="assets/app.js" data-page="installation"></script>
+</body>
+</html>

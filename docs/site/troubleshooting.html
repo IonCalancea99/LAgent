@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Troubleshooting · LAgent Docs</title>
+<link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+<header class="topbar">
+  <button id="navToggle" aria-label="Toggle navigation">☰</button>
+  <div class="brand">🤖 LAgent Docs</div>
+  <div class="search-wrap">
+    <input id="searchInput" type="text" placeholder="Search docs…" autocomplete="off" />
+    <div id="searchResults" class="search-results"></div>
+  </div>
+  <button id="themeToggle" aria-label="Toggle theme">🌓</button>
+</header>
+
+<div class="layout">
+  <nav id="sidebar" class="sidebar"></nav>
+
+  <main class="content">
+    <h1>Troubleshooting</h1>
+    <p>These are the failure patterns observed during real setup and verification runs of this
+      project, distilled from <code>docs/package-restrictions.md</code>. Most failures were
+      environment drift, not project bugs — read the decision rule at the bottom first.</p>
+
+    <h2 id="environment">Environment discipline</h2>
+    <div class="callout warn">
+      <strong class="callout-title">Symptom</strong>
+      <code>externally-managed-environment</code>, <code>No module named pytest</code>,
+      <code>No module named numpy</code> when installing or running LAgent.
+    </div>
+    <p><strong>Cause:</strong> a command targeted the system/OS-managed Python instead of the
+      project's virtual environment.</p>
+    <p><strong>Fix:</strong></p>
+    <pre><code>cd /path/to/LAgent
+python3.12 -m venv .venv
+source .venv/bin/activate
+python -m pip install -U pip
+python -m pip install -e .</code></pre>
+    <ul>
+      <li>Never run <code>python3 -m pip install ...</code> or <code>pip install ...</code> against the system interpreter.</li>
+      <li>Never pass <code>--break-system-packages</code> to work around the PEP 668 guard.</li>
+      <li>Always confirm <code>which python</code> resolves inside <code>.venv</code> before installing or testing.</li>
+    </ul>
+
+    <h2 id="mismatched-shells">Mismatched shells / interpreters</h2>
+    <p>If dependency installs happen in one shell (e.g. a terminal) but tests run from another
+      (e.g. an IDE-integrated shell), you can end up with three different Python states: system
+      Python, the project <code>.venv</code>, and whatever the editor defaults to. Always run
+      both install and test commands from the same activated <code>.venv</code>:</p>
+    <pre><code>cd /path/to/LAgent
+source .venv/bin/activate
+PYTHONPATH=. python -m pytest -q</code></pre>
+
+    <h2 id="platform-errors">Platform-specific package errors</h2>
+    <div class="callout warn">
+      <strong class="callout-title">Symptom</strong>
+      Install failures or resolution errors for <code>pywin32</code>, <code>dxcam</code>, or
+      other Windows-only screen-capture tooling on macOS/Linux.
+    </div>
+    <p><strong>This is expected.</strong> <code>pyproject.toml</code> declares
+      <code>pywin32</code> as <code>sys_platform == 'win32'</code> only, and <code>dxcam</code>
+      is Windows-native. Do not attempt to force-install these on a non-Windows host — they are
+      intentionally unavailable there. Use the <a href="installation.html#docker">Docker path</a>
+      or the cross-platform dependency subset for development/testing on macOS/Linux.</p>
+
+    <h2 id="python-version">Python runtime mismatch</h2>
+    <p>The declared runtime target is <strong>Python 3.12</strong>. If your default toolchain
+      resolves to a different version (e.g. 3.14 or an OS-managed interpreter), create the
+      virtual environment explicitly with <code>python3.12</code> rather than relying on
+      whatever <code>python3</code> happens to point to.</p>
+
+    <h2 id="ssl">SSL / certificate issues reaching PyPI</h2>
+    <div class="callout warn">
+      <strong class="callout-title">Symptom</strong>
+      Package index unreachable, SSL trust errors during <code>pip install</code>.
+    </div>
+    <p>Treat this as an environment/infrastructure issue, not a project code problem. Valid
+      fixes include using the environment's own certificate bundle, confirming the venv is
+      active, and verifying Python/OpenSSL versions are consistent. Avoid reaching for
+      <code>--trusted-host</code> or similar flags unless there is a clear, documented reason
+      and it's explicitly approved — these can mask a real trust-chain problem.</p>
+
+    <h2 id="dependency-drift">Keep dependencies aligned to the manifest</h2>
+    <p><code>pyproject.toml</code> is the single source of truth for dependencies. If a local
+      import fails, verify in this order before adding new packages ad hoc:</p>
+    <ol>
+      <li>The active interpreter is the project's <code>.venv</code></li>
+      <li>The project was installed via <code>pip install -e .</code></li>
+      <li>The missing package is part of the declared dependency set (or a test-only requirement)</li>
+      <li>The package is valid for your current OS and Python version</li>
+    </ol>
+
+    <h2 id="docker-fallback">Prefer Docker for repeatable validation</h2>
+    <p>For CI-like or repeatable checks, use the project's container path instead of ad hoc
+      local <code>pip</code> attempts:</p>
+    <pre><code>docker build -t lagent-test .
+docker run --rm lagent-test</code></pre>
+
+    <h2 id="decision-rule">Decision rule</h2>
+    <div class="callout ok">
+      <strong class="callout-title">Fix the environment first</strong>
+      If a command fails because of a system package policy, missing interpreter alignment, an
+      unsupported OS dependency, or SSL/certificate trust problems — stop and fix the
+      environment before changing project code. The environment is the primary suspect for
+      these failure classes, not the code in <code>lagent/</code>.
+    </div>
+
+    <div class="page-nav"></div>
+  </main>
+
+  <aside id="toc" class="toc"></aside>
+</div>
+
+<script src="assets/search-index.js"></script>
+<script src="assets/app.js" data-page="troubleshooting"></script>
+</body>
+</html>

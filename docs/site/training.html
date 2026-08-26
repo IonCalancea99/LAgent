@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Training Pipeline · LAgent Docs</title>
+<link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+<header class="topbar">
+  <button id="navToggle" aria-label="Toggle navigation">☰</button>
+  <div class="brand">🤖 LAgent Docs</div>
+  <div class="search-wrap">
+    <input id="searchInput" type="text" placeholder="Search docs…" autocomplete="off" />
+    <div id="searchResults" class="search-results"></div>
+  </div>
+  <button id="themeToggle" aria-label="Toggle theme">🌓</button>
+</header>
+
+<div class="layout">
+  <nav id="sidebar" class="sidebar"></nav>
+
+  <main class="content">
+    <h1>Training Pipeline</h1>
+    <p>LAgent's vision and behavior models are produced entirely offline, from your own
+      gameplay recordings and optional YouTube footage. Training is invoked exclusively via
+      the <code>lagent.train</code> CLI — it never co-runs with a live session, since both
+      compete for the same GPU.</p>
+
+    <div class="callout warn">
+      <strong class="callout-title">Never train during a live session</strong>
+      A live Session and a training run must not run concurrently on the same machine. Stop
+      any active session before running <code>python -m lagent.train …</code>.
+    </div>
+
+    <h2 id="workflow">Training workflow at a glance</h2>
+    <div class="pipeline">
+      <div class="step">1. Record gameplay</div>
+      <span class="sep">→</span>
+      <div class="step">2. Auto-prelabel</div>
+      <span class="sep">→</span>
+      <div class="step">3. Correct in Label Studio</div>
+      <span class="sep">→</span>
+      <div class="step">4. Train / fine-tune</div>
+      <span class="sep">→</span>
+      <div class="step">5. Atomic deploy</div>
+    </div>
+    <p>YouTube ingestion feeds the same pipeline at step 1, as an alternative or supplement to
+      your own recordings (e.g. community footage of fishing mechanics).</p>
+
+    <h2 id="recording">1. Recording gameplay</h2>
+    <p>Start an agent process with <code>--record</code> to capture frames and your manual
+      keyboard/mouse input simultaneously, with no interference to normal play:</p>
+    <pre><code>python -m lagent.agent --class warlord --record</code></pre>
+    <p>Or use the "Recording Mode" toggle from the tray menu. Recording is mutually exclusive
+      with a live automated session at process launch. Output is written under
+      <code>recordings/</code>.</p>
+
+    <h2 id="ingestion">2a. (Optional) YouTube frame ingestion</h2>
+    <p>Supplement your own recordings with frames extracted from a public video:</p>
+    <pre><code>python -m lagent.train ingest --url "&lt;video-url&gt;" --fps 5 --output-dir recordings</code></pre>
+    <table>
+      <thead><tr><th>Flag</th><th>Default</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>--url</code></td><td>required</td><td>Public video URL supported by <code>yt-dlp</code></td></tr>
+        <tr><td><code>--fps</code></td><td>required</td><td>Frames to extract per second (must be positive)</td></tr>
+        <tr><td><code>--output-dir</code></td><td><code>recordings</code></td><td>Where extracted frames are written</td></tr>
+      </tbody>
+    </table>
+    <p>Ingested frames are indistinguishable from recorded frames once in the label queue — no
+      credentials are required, and downloading uses <code>yt-dlp</code> only.</p>
+
+    <h2 id="prelabeling">2b. Auto-prelabeling</h2>
+    <p>Run the current YOLO models over every captured frame to produce a first-pass annotation
+      file in Label Studio import format:</p>
+    <pre><code>python -m lagent.train prelabel \
+    --recording recordings/&lt;session-folder&gt; \
+    --batch-size 32 \
+    --confidence-threshold 0.5 \
+    --model-root models</code></pre>
+    <table>
+      <thead><tr><th>Flag</th><th>Default</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>--recording</code></td><td>required</td><td>Path to a recording directory containing a <code>frames/</code> subdirectory</td></tr>
+        <tr><td><code>--batch-size</code></td><td><code>32</code></td><td>Frame inference batch size</td></tr>
+        <tr><td><code>--confidence-threshold</code></td><td><code>0.5</code></td><td>Minimum detection confidence kept in the output</td></tr>
+        <tr><td><code>--model-root</code></td><td><code>models</code></td><td>Root directory containing <code>&lt;class&gt;/current.pt</code> models</td></tr>
+      </tbody>
+    </table>
+    <p>Import the resulting annotation file into Label Studio, review, and correct any wrong or
+      missing labels before training.</p>
+
+    <h2 id="train">3. Model training</h2>
+    <pre><code>python -m lagent.train train \
+    --recording recordings/&lt;session-folder&gt; \
+    --model-class warlord \
+    --epochs 10 \
+    --batch-size 16 \
+    --validation-split 0.8 \
+    --lr 0.001 \
+    --model-root models \
+    --mlflow-dir models/.mlflow \
+    --mAP-threshold 0.65 \
+    --device cuda</code></pre>
+    <table>
+      <thead><tr><th>Flag</th><th>Default</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>--recording</code></td><td>required</td><td>Directory containing <code>frames/</code> and corrected <code>labels.json</code></td></tr>
+        <tr><td><code>--model-class</code></td><td><code>common</code></td><td>Which <code>models/&lt;class&gt;/</code> directory to train and deploy to</td></tr>
+        <tr><td><code>--epochs</code></td><td><code>10</code></td><td>Training epochs</td></tr>
+        <tr><td><code>--batch-size</code></td><td><code>16</code></td><td>Training batch size</td></tr>
+        <tr><td><code>--validation-split</code></td><td><code>0.8</code></td><td>Train/validation split fraction</td></tr>
+        <tr><td><code>--lr</code></td><td><code>0.001</code></td><td>Learning rate</td></tr>
+        <tr><td><code>--model-root</code></td><td><code>models</code></td><td>Root directory for model output</td></tr>
+        <tr><td><code>--mlflow-dir</code></td><td><code>models/.mlflow</code></td><td>Local MLflow tracking directory</td></tr>
+        <tr><td><code>--mAP-threshold</code></td><td><code>0.65</code></td><td>Minimum mAP50 required before the new model is deployed</td></tr>
+        <tr><td><code>--device</code></td><td><code>cuda</code></td><td><code>cuda</code> or <code>cpu</code></td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="deploy">Atomic deployment &amp; versioning</h2>
+    <p>If the trained model clears the <code>--mAP-threshold</code>, it is written to
+      <code>models/&lt;class&gt;/current.pt</code> via a temp-write followed by
+      <code>os.replace()</code> — an atomic swap, so a session can never observe a
+      partially-written model file. The GPU Inference Server only loads <code>current.pt</code>
+      at its own startup; it never reloads mid-session. The prior version is not overwritten
+      until the new one is validated, and every run is tracked in the local MLflow directory
+      for comparison and rollback reference.</p>
+
+    <div class="callout ok">
+      <strong class="callout-title">Target training time</strong>
+      A new behavior/vision model should reach functional quality within about 2 hours on the
+      reference hardware envelope (GTX 1070 Ti class GPU, 4–6 GB VRAM during training).
+    </div>
+
+    <div class="page-nav"></div>
+  </main>
+
+  <aside id="toc" class="toc"></aside>
+</div>
+
+<script src="assets/search-index.js"></script>
+<script src="assets/app.js" data-page="training"></script>
+</body>
+</html>

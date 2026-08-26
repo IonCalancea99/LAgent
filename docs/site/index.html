@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Overview · LAgent Docs</title>
+<link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+<header class="topbar">
+  <button id="navToggle" aria-label="Toggle navigation">☰</button>
+  <div class="brand">🤖 LAgent Docs</div>
+  <div class="search-wrap">
+    <input id="searchInput" type="text" placeholder="Search docs… (installation, profiles, CLI, training…)" autocomplete="off" />
+    <div id="searchResults" class="search-results"></div>
+  </div>
+  <button id="themeToggle" aria-label="Toggle theme">🌓</button>
+</header>
+
+<div class="layout">
+  <nav id="sidebar" class="sidebar"></nav>
+
+  <main class="content">
+    <h1>LAgent — Documentation</h1>
+    <p>
+      <span class="badge">Local-only</span>
+      <span class="badge">Python 3.12</span>
+      <span class="badge">Windows runtime</span>
+    </p>
+
+    <p>
+      LAgent is a fully local, vision-driven automation system that plays a 2-character
+      Lineage II party (Warlord + Prophet) without human intervention after login. It never
+      reads client memory or injects packets — it only looks at the screen (screen capture +
+      YOLO + OCR) and acts through simulated mouse/keyboard input shaped by a Human Simulation
+      Layer (Bézier mouse paths, timing noise, fatigue, error injection).
+    </p>
+
+    <div class="callout info">
+      <strong class="callout-title">Use this guide in order</strong>
+      Start with <a href="installation.html">Installation</a>, then
+      <a href="preparation.html">Preparation &amp; Config</a>, then
+      <a href="running.html">Running LAgent</a>. Come back to
+      <a href="training.html">Training</a> once you need to record data and produce your own
+      models, and use <a href="architecture.html">Architecture</a> as a reference map of the
+      whole system.
+    </div>
+
+    <h2 id="quick-links">Quick links</h2>
+    <div class="cards">
+      <div class="card">
+        <h3>⚙️ Installation</h3>
+        <p>Python environment, dependencies, Docker alternative, verifying the install.</p>
+        <a href="installation.html">Go to Installation →</a>
+      </div>
+      <div class="card">
+        <h3>🧩 Preparation &amp; Config</h3>
+        <p>Directory layout, YAML agent profiles, model files, sessions database.</p>
+        <a href="preparation.html">Go to Preparation →</a>
+      </div>
+      <div class="card">
+        <h3>▶️ Running LAgent</h3>
+        <p>Tray/UI launcher, session modes, CLI flags, status overlay, shutdown.</p>
+        <a href="running.html">Go to Running →</a>
+      </div>
+      <div class="card">
+        <h3>🎓 Training Pipeline</h3>
+        <p>Record gameplay, auto-prelabel, fine-tune YOLO, ingest YouTube footage.</p>
+        <a href="training.html">Go to Training →</a>
+      </div>
+      <div class="card">
+        <h3>🏗️ Architecture</h3>
+        <p>Processes, actor-model diagram, invariants, tech stack.</p>
+        <a href="architecture.html">Go to Architecture →</a>
+      </div>
+      <div class="card">
+        <h3>🛠️ Troubleshooting</h3>
+        <p>Environment drift, platform-specific packages, SSL issues.</p>
+        <a href="troubleshooting.html">Go to Troubleshooting →</a>
+      </div>
+    </div>
+
+    <h2 id="what-it-does">What LAgent does</h2>
+    <p>Each game window runs an independent perception → decision → action loop:</p>
+    <div class="pipeline">
+      <div class="step">1. Capture (~10 FPS)</div>
+      <span class="sep">→</span>
+      <div class="step">2. Extract ROIs</div>
+      <span class="sep">→</span>
+      <div class="step">3. YOLO + OCR (GPU server)</div>
+      <span class="sep">→</span>
+      <div class="step">4. FSM + policy decision</div>
+      <span class="sep">→</span>
+      <div class="step">5. Human Simulation Layer</div>
+      <span class="sep">→</span>
+      <div class="step">6. Simulated mouse/keyboard</div>
+    </div>
+    <p>
+      A lightweight Party Bus (ZeroMQ PUB/SUB) keeps the Prophet's buff cycle and the Warlord's
+      combat state in sync, and an Orchestrator process monitors heartbeats from both agents.
+    </p>
+
+    <h2 id="requirements">System requirements</h2>
+    <table>
+      <thead><tr><th>Requirement</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td>Python</td><td>3.12 (declared in <code>pyproject.toml</code>)</td></tr>
+        <tr><td>Full runtime OS</td><td>Windows — <code>dxcam</code>, <code>pynput</code>, <code>pywin32</code> are Windows-native and required for live capture/input</td></tr>
+        <tr><td>Development / test OS</td><td>macOS and Linux can install the cross-platform subset and run the test suite (see <a href="installation.html">Installation</a>)</td></tr>
+        <tr><td>GPU</td><td>Local NVIDIA GPU with ~8 GB VRAM (reference: GTX 1070 Ti); inference budget ~2.5–3.5 GB, training 4–6 GB (offline only, never during a live session)</td></tr>
+        <tr><td>Network</td><td>Local-only — zero cloud services, zero external data exposure (NFR-1)</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="core-principles">Core principles worth knowing up front</h2>
+    <ul>
+      <li><strong>No client modification, ever</strong> — no memory reads, no packet injection; only screen capture and OS-level input simulation.</li>
+      <li><strong>One GPU owner</strong> — only the GPU Inference Server process touches CUDA; agents never load models directly.</li>
+      <li><strong>Tray/UI is the sole launcher</strong> — all runtime processes (agents, GPU server, orchestrator) are spawned by <code>python -m lagent.ui</code>, never started standalone in normal operation.</li>
+      <li><strong>Fail-fast configuration</strong> — an invalid YAML profile raises a validation error at startup; there is no silent fallback to defaults.</li>
+      <li><strong>Training never runs alongside a live session</strong> — the training pipeline is a separate CLI and competes for the same GPU.</li>
+    </ul>
+
+    <div class="page-nav"></div>
+  </main>
+
+  <aside id="toc" class="toc"></aside>
+</div>
+
+<script src="assets/search-index.js"></script>
+<script src="assets/app.js" data-page="index"></script>
+</body>
+</html>
