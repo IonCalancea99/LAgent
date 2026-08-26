@@ -20,14 +20,27 @@ logger = logging.getLogger(__name__)
 class PolicyQueue(queue.Queue):
     """Bounded result queue that evicts the oldest result when full."""
 
+    def __init__(self, maxsize: int = 0) -> None:
+        super().__init__(maxsize=maxsize)
+        self.dropped_results = 0
+
     def _put_latest(self, result: PerceptionResult) -> None:
         with self.not_full:
             if self.maxsize > 0 and self._qsize() >= self.maxsize:
                 self._get()
                 self.unfinished_tasks = max(0, self.unfinished_tasks - 1)
+                self.dropped_results += 1
             self._put(result)
             self.unfinished_tasks += 1
             self.not_empty.notify()
+
+    @property
+    def queue_state(self) -> dict[str, int]:
+        return {
+            "size": self.qsize(),
+            "maxsize": self.maxsize,
+            "dropped_results": self.dropped_results,
+        }
 
     def put(
         self,
@@ -124,6 +137,7 @@ class InferenceClient(threading.Thread):
                 frame_bytes, roi_map, timeout=self.timeout
             )
             received_at = time.perf_counter()
+            response.result._frame_id = captured.frame_id
             self.policy_queue.put_nowait(response.result)
             push_latency_ms = (time.perf_counter() - received_at) * 1000
             if self.debug:

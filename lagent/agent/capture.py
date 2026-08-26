@@ -11,7 +11,8 @@ import logging
 import queue
 import threading
 import time
-from dataclasses import dataclass
+import uuid
+from dataclasses import dataclass, field
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -27,6 +28,7 @@ class Frame:
     source: str
     captured_at: float
     roi_map: dict[str, Any] | None = None
+    frame_id: str = field(default_factory=lambda: uuid.uuid4().hex)
 
     @property
     def width(self) -> int:
@@ -48,14 +50,27 @@ class Frame:
 class FrameQueue(queue.Queue):
     """Bounded queue that evicts the oldest frame instead of blocking."""
 
+    def __init__(self, maxsize: int = 0) -> None:
+        super().__init__(maxsize=maxsize)
+        self.dropped_frames = 0
+
     def _put_latest(self, frame: Frame) -> None:
         with self.not_full:
             while self.maxsize > 0 and self._qsize() >= self.maxsize:
                 self._get()
                 self.unfinished_tasks -= 1
+                self.dropped_frames += 1
             self._put(frame)
             self.unfinished_tasks += 1
             self.not_empty.notify()
+
+    @property
+    def queue_state(self) -> dict[str, int]:
+        return {
+            "size": self.qsize(),
+            "maxsize": self.maxsize,
+            "dropped_frames": self.dropped_frames,
+        }
 
     def put(self, item: Frame, block: bool = True, timeout: float | None = None) -> None:
         del block, timeout

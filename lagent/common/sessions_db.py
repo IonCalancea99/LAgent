@@ -16,6 +16,7 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from uuid import UUID
+from pydantic import BaseModel
 
 # Module logger
 logger = logging.getLogger(__name__)
@@ -33,6 +34,8 @@ class SessionJSONEncoder(json.JSONEncoder):
             return str(obj)
         if isinstance(obj, (bytes, bytearray)):
             return bytes(obj).decode("utf-8", errors="replace")
+        if isinstance(obj, BaseModel):
+            return obj.model_dump(mode="json")
         return super().default(obj)
 
 

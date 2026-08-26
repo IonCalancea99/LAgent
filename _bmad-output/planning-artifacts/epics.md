@@ -487,7 +487,11 @@ So that I can validate the bot's behavioral fingerprint against my recorded play
 
 Ion can start an automated fishing session on a single game window. The bot casts, detects fish tension via YOLO, reels in, and loops for a full 1-hour uninterrupted session. Character identification works on startup. This is the Phase 1 gate.
 
+> Execution-readiness note: Epic 4 is the correct Phase 1 gate, but it is not ready for execution as a single story bundle. Story 4.1 must be decomposed into smaller implementation chunks before work begins, and the 60-minute run remains an end-to-end validation gate rather than the only acceptance measure for the state machine. The deterministic cast/wait/reel harness is required before approving runtime behavior under real game conditions.
+
 ### Story 4.1: Agent Base Loop — Capture-to-Policy Single-Window Pipeline
+
+> Implementation note: Split this story into smaller execution units before implementation: (a) capture queue + backpressure/eviction semantics, (b) inference client + latency logging, (c) state-machine tick orchestration, and (d) HSL + OS output handoff. Each chunk must have an explicit test harness and no hidden cross-stage timing assumptions.
 
 As Ion,
 I want the full single-window pipeline wired end-to-end: capture thread → Inference Client → PolicyQueue → FSM base → HSL → OS input,
@@ -497,15 +501,19 @@ So that a running Agent process completes one perception-decision-action tick pe
 
 **Given** a single Agent process is started with a valid profile
 **When** the main loop runs
-**Then** each tick: one frame is captured, sent to GPU Server, `PerceptionResult` returned, FSM state handler invoked, resulting `Action` passed through HSL, dispatched to OS input; the full tick latency is logged
+**Then** each tick: one frame is captured, sent to GPU Server, `PerceptionResult` returned, FSM state handler invoked, resulting `Action` passed through HSL, dispatched to OS input; the full tick latency is logged and the tick ID is emitted so queue eviction and latency backpressure can be traced deterministically
 
 **Given** the FSM is in a stub IDLE state that produces a no-op action
 **When** the loop runs for 60 seconds
-**Then** the Agent completes ≥500 ticks (≥~8/s); no tick causes an unhandled exception; all ticks are logged to `sessions.db`
+**Then** the Agent completes ≥500 ticks (≥~8/s); no tick causes an unhandled exception; all ticks are logged to `sessions.db`; the loop remains stable when one frame is delayed by up to 2x the normal inference budget
 
 **Given** a downstream stage (e.g., GPU Server) is slow for one tick
 **When** the capture thread continues running
-**Then** oldest frames are evicted from FrameQueue; the capture thread is never blocked; latency does not cascade
+**Then** oldest frames are evicted from FrameQueue; the capture thread is never blocked; no backlog causes latency to cascade across subsequent ticks; the dropped-frame count is logged with the queue state
+
+**Given** the base loop is under test in a deterministic harness
+**When** cast, wait, and reel transitions are simulated
+**Then** each state transition is replayable from a seeded input sequence and the same state machine outcome is produced across runs without dependence on wall-clock timing
 
 ---
 
@@ -519,15 +527,19 @@ So that the correct agent profile is assigned automatically and I am only prompt
 
 **Given** a Warlord game window is the bound window
 **When** the Agent starts without `--class` flag
-**Then** YOLO detects skill bar icons and identifies the window as `warlord`; `warlord.yaml` is loaded; identification result is logged
+**Then** YOLO detects skill bar icons and identifies the window as `warlord`; `warlord.yaml` is loaded; identification result is logged; the accepted confidence threshold for automatic assignment is defined as `>= 0.75` for `warlord` detection
 
-**Given** identification confidence is below the threshold
+**Given** identification confidence is below the configured threshold (`< 0.75`)
 **When** the Agent starts
-**Then** the control loop is halted; Ion is prompted in the terminal to manually confirm the class assignment before the loop begins
+**Then** the control loop is halted; Ion is prompted in the terminal to manually confirm the class assignment before the loop begins; the detection result, confidence value, and fallback path are logged
 
 **Given** `--class warlord` flag is passed explicitly
 **When** the Agent starts
-**Then** identification scan is skipped and the specified profile is loaded directly
+**Then** identification scan is skipped and the specified profile is loaded directly; the override is logged as an explicit operator decision
+
+**Given** the startup identification result is ambiguous or fails the threshold but the user chooses a profile manually
+**When** the loop launches
+**Then** the chosen profile remains active for the session and the ambiguity is recorded in `sessions.db` for later tuning
 
 ---
 
@@ -562,16 +574,20 @@ So that the Phase 1 gate is met and the full end-to-end pipeline is validated on
 **Acceptance Criteria:**
 
 **Given** the FSM is in WAITING state and a tension visual indicator is present in the game frame
-**When** the YOLO detection returns a tension class detection above the confidence threshold
-**Then** the FSM transitions to REELING; the reel input key sequence is executed via HSL; the FSM returns to IDLE
+**When** the YOLO detection returns a tension class detection above the configured confidence threshold (`>= 0.80`)
+**Then** the FSM transitions to REELING; the reel input key sequence is executed via HSL; the FSM returns to IDLE; the confidence score and tension window are logged
 
 **Given** the bot runs the fishing loop for 60 uninterrupted minutes
 **When** the session ends
-**Then** zero unhandled exceptions have occurred; the session log shows a continuous sequence of cast/wait/reel cycles; no human input was required
+**Then** zero unhandled exceptions have occurred; the session log shows a continuous sequence of cast/wait/reel cycles; no human input was required; this is treated as the end-to-end validation gate for Epic 4 and not as the sole acceptance criterion for the state machine
 
 **Given** a bite event is missed (YOLO confidence below threshold during the bite window)
 **When** the timeout expires in WAITING state
-**Then** the FSM returns to IDLE and begins the next cast; no error state is entered
+**Then** the FSM returns to IDLE and begins the next cast; no error state is entered; the missed-tension event and timeout are logged for operational review
+
+**Given** the cast/wait/reel logic is under test in a deterministic harness
+**When** a seeded sequence of frame results is replayed
+**Then** the resulting state transitions and actions are identical across repeated runs, allowing approval of the runtime implementation before live use
 
 ---
 

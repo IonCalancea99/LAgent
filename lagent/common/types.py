@@ -5,7 +5,7 @@ All six types defined here are exported only through lagent.common.__init__.
 No subsystem re-exports or redefines these contracts.
 """
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 from typing import Annotated, Any, Dict, List, Tuple
 
 
@@ -23,6 +23,7 @@ class PerceptionResult(BaseModel):
     """Unified perception output: vision + OCR."""
     detections: List[Detection] = Field(default_factory=list, description="List of detected objects")
     ocr_values: Dict[str, str] = Field(default_factory=dict, description="OCR text map {region_key: text}")
+    _frame_id: str | None = PrivateAttr(default=None)
 
 
 class GameState(BaseModel):

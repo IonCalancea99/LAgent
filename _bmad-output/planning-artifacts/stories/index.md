@@ -18,6 +18,13 @@ This folder is the single place for story artifacts used during implementation p
 - 3.4 Micro-drift and Error Injection
 - 3.5 Shadow Mode - Full HSL Shaping Without OS Output
 
+## Epic 4 - Fishing Mode
+
+- 4.1 Agent Base Loop — Capture-to-Policy Single-Window Pipeline
+- 4.2 Character Identification on Startup
+- 4.3 Fishing FSM — Cast and Wait States
+- 4.4 Fishing FSM — Tension Detection and Reel
+
 ## Naming Convention
 
 Story files are named `<epic>-<story>-<slug>.md`, for example `3-1-bezier-mouse-path-generator.md`.
