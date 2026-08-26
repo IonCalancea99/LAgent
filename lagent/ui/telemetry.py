@@ -11,9 +11,147 @@ Implements:
 """
 
 import logging
+import json
+import math
+import sqlite3
+from dataclasses import dataclass
+from datetime import datetime
 from typing import Optional, Dict, Any, List
 
 logger = logging.getLogger(__name__)
+
+
+def clamp_percentage(value: Any) -> Optional[float]:
+    """Return a finite percentage in the display range, or unknown."""
+    if isinstance(value, bool):
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(number):
+        return None
+    return max(0.0, min(100.0, number))
+
+
+def format_elapsed(seconds: Optional[float]) -> str:
+    """Format elapsed session time deterministically as HH:MM:SS."""
+    if seconds is None or not math.isfinite(seconds) or seconds < 0:
+        return "--:--:--"
+    total = int(seconds)
+    hours, remainder = divmod(total, 3600)
+    minutes, seconds_part = divmod(remainder, 60)
+    return f"{hours:02d}:{minutes:02d}:{seconds_part:02d}"
+
+
+@dataclass
+class AgentSnapshot:
+    agent: str
+    state: str = "Stopped"
+    hp_percent: Optional[float] = None
+    mp_percent: Optional[float] = None
+    elapsed_seconds: Optional[float] = None
+    stale: bool = False
+    error: Optional[str] = None
+    event_timestamp: Optional[datetime] = None
+
+    @property
+    def elapsed(self) -> str:
+        return format_elapsed(self.elapsed_seconds)
+
+
+class TelemetryReader:
+    """Read-only, short-lived SQLite reader for overlay state snapshots."""
+
+    SOURCES = {"WL": "agent.warlord", "PP": "agent.prophet"}
+
+    def __init__(self, db_path: str, stale_after: float = 2.0, clock=None):
+        self.db_path = db_path
+        self.stale_after = stale_after
+        self.clock = clock or datetime.now
+        self._snapshots: Dict[str, AgentSnapshot] = {}
+
+    def read(self, session_id: Optional[str] = None, now: Optional[datetime] = None) -> Dict[str, AgentSnapshot]:
+        current = now or self.clock()
+        snapshots = {name: AgentSnapshot(name) for name in self.SOURCES}
+        if not session_id:
+            self._session_id = None
+            self._snapshots = snapshots
+            return snapshots
+        if session_id != self._session_id:
+            self._snapshots = {}
+        try:
+            with sqlite3.connect(self.db_path, timeout=0.25) as connection:
+                session = connection.execute(
+                    "SELECT started_at FROM sessions WHERE session_id = ?", (session_id,)
+                ).fetchone()
+                if session is None:
+                    return snapshots
+                elapsed = self._elapsed(self._parse_timestamp(session[0]), current)
+                for name, source in self.SOURCES.items():
+                    row = connection.execute(
+                        """SELECT ts, payload_json FROM events
+                           WHERE session_id = ? AND source = ?
+                           AND type IN ('state', 'state_transition', 'heartbeat', 'tick')
+                           ORDER BY id DESC LIMIT 1""",
+                        (session_id, source),
+                    ).fetchone()
+                    snapshots[name] = self._snapshot_from_event(
+                        name, row, self._snapshots.get(name), elapsed, current
+                    )
+        except (sqlite3.Error, OSError) as exc:
+            logger.warning("Overlay telemetry read failed: %s", exc)
+            snapshots = {name: self._snapshots.get(name, AgentSnapshot(name)) for name in self.SOURCES}
+        self._snapshots = snapshots
+        self._session_id = session_id
+        return snapshots
+
+    read_snapshot = read
+
+    def _snapshot_from_event(self, name, row, previous, elapsed, now):
+        if row is None:
+            retained = previous or AgentSnapshot(name)
+            retained.elapsed_seconds, retained.stale, retained.error = elapsed, True, "No telemetry"
+            return retained
+        timestamp = self._parse_timestamp(row[0])
+        try:
+            payload = json.loads(row[1])
+            if not isinstance(payload, dict):
+                raise ValueError("payload is not an object")
+            state = payload.get("fsm_state", payload.get("state", payload.get("to_state")))
+            if not isinstance(state, str) or not state.strip():
+                raise ValueError("missing FSM state")
+            hp = clamp_percentage(payload.get("hp_percent"))
+            mp = clamp_percentage(payload.get("mp_percent"))
+            if hp is None and mp is None and ("hp_percent" in payload or "mp_percent" in payload):
+                raise ValueError("invalid health or mana")
+            age = self._elapsed(timestamp, now)
+            stale = age is None or age > self.stale_after
+            return AgentSnapshot(name, state.strip(), hp, mp, elapsed, stale,
+                                 "Stale telemetry" if stale else None, timestamp)
+        except (ValueError, TypeError, json.JSONDecodeError) as exc:
+            retained = previous or AgentSnapshot(name)
+            retained.elapsed_seconds, retained.stale, retained.error = elapsed, True, f"Invalid telemetry: {exc}"
+            return retained
+
+    @staticmethod
+    def _parse_timestamp(value):
+        if not value:
+            return None
+        try:
+            return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _elapsed(started, now):
+        if started is None:
+            return None
+        if started.tzinfo is not None and now.tzinfo is None:
+            now = now.replace(tzinfo=started.tzinfo)
+        if started.tzinfo is None and now.tzinfo is not None:
+            now = now.replace(tzinfo=None)
+        return max(0.0, (now - started).total_seconds())
 
 
 class TelemetryLogger:

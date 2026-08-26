@@ -198,7 +198,7 @@ class TrayIcon:
         
         self.menu.stop_session.callback = on_stop_session
         self.menu.recording_mode_toggle.callback = self.menu.toggle_recording_mode
-        self.menu.status_overlay_toggle.callback = self.menu.toggle_status_overlay
+        self.menu.status_overlay_toggle.callback = on_toggle_overlay
         self.menu.exit.callback = on_exit
         
         logger.debug("Menu callbacks registered")
@@ -315,7 +315,7 @@ class TrayIcon:
     
     def _invoke_overlay_toggle(self) -> None:
         """Toggle overlay mode and refresh menu display."""
-        self.menu.toggle_status_overlay()
+        self.menu.status_overlay_toggle.callback and self.menu.status_overlay_toggle.callback()
         self._refresh_pystray_menu()
     
     def _refresh_pystray_menu(self) -> None:
@@ -342,6 +342,13 @@ class TrayIcon:
         if icon:
             logger.info("Showing tray icon")
             icon.run()
+
+    def show_detached(self) -> None:
+        """Show the tray icon without taking ownership of the event loop."""
+        icon = self.get_icon_instance()
+        if icon:
+            logger.info("Showing tray icon in detached mode")
+            icon.run_detached()
     
     def hide(self) -> None:
         """Hide the tray icon."""

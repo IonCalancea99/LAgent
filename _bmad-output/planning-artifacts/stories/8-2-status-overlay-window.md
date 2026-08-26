@@ -2,7 +2,7 @@
 storyId: 8.2
 epic: "Epic 8: Tray UI & Status Overlay"
 title: "Status Overlay Window"
-status: ready-for-dev
+status: done
 ---
 
 # Story 8.2: Status Overlay Window

@@ -27,6 +27,7 @@ from lagent.common.sessions_db import SessionsDB
 from lagent.ui.tray import TrayIcon
 from lagent.ui.process_manager import ProcessManager
 from lagent.ui.telemetry import TelemetryLogger
+from lagent.ui.overlay import StatusOverlay, QApplication
 
 
 class UIController:
@@ -66,6 +67,8 @@ class UIController:
             icon_path = self._find_icon_asset()
         
         self.tray = TrayIcon(icon_path=icon_path)
+        self._overlay_app = None
+        self.overlay = None
         
         # Register menu callbacks
         self._setup_menu_callbacks()
@@ -140,6 +143,8 @@ class UIController:
             
             # Start the session
             session_id = self.process_manager.start_session(mode)
+            if self.overlay is not None:
+                self.overlay.session_id = session_id
             
             # Log telemetry
             self.telemetry.log_startup_started(
@@ -177,6 +182,8 @@ class UIController:
         try:
             self.process_manager.stop_session()
             self.tray.menu.on_session_stopped()
+            if self.overlay is not None:
+                self.overlay.session_id = None
             logger.info("Session stopped successfully")
         except Exception as e:
             logger.error(f"Error stopping session: {e}")
@@ -189,7 +196,31 @@ class UIController:
     def _on_toggle_overlay(self) -> None:
         """Handle Status Overlay toggle."""
         logger.info("User toggled Status Overlay")
+        if self.tray.menu.state.status_overlay_active:
+            if self.overlay is not None:
+                self.overlay.close()
+            self.tray.menu.toggle_status_overlay()
+            return
+        if QApplication is None:
+            logger.warning("PyQt6 is not installed; status overlay unavailable")
+            return
+        if self._overlay_app is None:
+            self._overlay_app = QApplication.instance() or QApplication([])
+        session_id = (self.process_manager.current_session.session_id
+                       if self.process_manager.current_session else None)
+        if self.overlay is None:
+            self.overlay = StatusOverlay(self.db_path, session_id=session_id)
+        else:
+            self.overlay.session_id = session_id
+        self.overlay.show_overlay()
         self.tray.menu.toggle_status_overlay()
+
+    def _run_qt_event_loop(self) -> None:
+        """Run the Qt event loop while pystray owns its detached loop."""
+        if self._overlay_app is None:
+            self._overlay_app = QApplication.instance() or QApplication([])
+        self.tray.show_detached()
+        self._overlay_app.exec()
     
     def _on_exit(self) -> None:
         """Handle Exit."""
@@ -207,6 +238,9 @@ class UIController:
             self.db.close()
         except Exception as e:
             logger.error(f"Error closing database: {e}")
+
+        if self.overlay is not None:
+            self.overlay.close()
         
         # Exit tray
         self.tray.hide()
@@ -217,8 +251,10 @@ class UIController:
         logger.info("Starting LAgent UI")
         
         try:
-            # Show tray icon (blocks until exit)
-            self.tray.show()
+            if QApplication is None:
+                self.tray.show()
+            else:
+                self._run_qt_event_loop()
         except Exception as e:
             logger.error(f"Fatal error in UI: {e}", exc_info=True)
             sys.exit(1)
