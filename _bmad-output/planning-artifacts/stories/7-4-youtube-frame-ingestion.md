@@ -2,7 +2,8 @@
 storyId: 7.4
 epic: "Epic 7: Training Pipeline"
 title: "YouTube Frame Ingestion"
-status: ready-for-dev
+status: review
+baseline_commit: b7fda8fc0bcf2e582ede9932517ba5abc30cefb1
 ---
 
 # Story 7.4: YouTube Frame Ingestion
@@ -55,22 +56,29 @@ So that I can supplement my own recordings with publicly available gameplay foot
 
 ## Tasks / Subtasks
 
-- [ ] Add yt-dlp and opencv-python to project dependencies (pyproject.toml)
-- [ ] Implement `python -m lagent.train ingest` CLI subcommand
-- [ ] Add argument parsing for `--url <url>`, `--fps <n>`, optional `--output-dir <path>`
-- [ ] Implement video URL validation (basic sanity check)
-- [ ] Integrate yt-dlp to download video to temp directory
-- [ ] Implement error handling for download failures (network, unavailable video, etc.)
-- [ ] Implement frame extraction via OpenCV with configurable FPS
-- [ ] Handle video format variations (different codecs, resolutions)
-- [ ] Create recording directory structure matching Story 7.1 output
-- [ ] Save frames to disk (PNG or JPEG, matching Recording Mode format)
-- [ ] Generate minimal `inputs.jsonl` stub (empty list or placeholder)
-- [ ] Create session metadata in `recordings/<ingest_session_id>` (e.g., README with source URL)
-- [ ] Add progress logging and frame count display
-- [ ] Implement cleanup of temp download directory
-- [ ] Create validation: extracted frame count matches expected count at given FPS
-- [ ] Add smoke tests for URL validation, yt-dlp integration, and frame extraction
+- [x] Add yt-dlp and opencv-python to project dependencies (pyproject.toml)
+- [x] Implement `python -m lagent.train ingest` CLI subcommand
+- [x] Add argument parsing for `--url <url>`, `--fps <n>`, optional `--output-dir <path>`
+- [x] Implement video URL validation (basic sanity check)
+- [x] Integrate yt-dlp to download video to temp directory
+- [x] Implement error handling for download failures (network, unavailable video, etc.)
+- [x] Implement frame extraction via OpenCV with configurable FPS
+- [x] Handle video format variations (different codecs, resolutions)
+- [x] Create recording directory structure matching Story 7.1 output
+- [x] Save frames to disk (PNG or JPEG, matching Recording Mode format)
+- [x] Generate minimal `inputs.jsonl` stub (empty or placeholder)
+- [x] Create session metadata in `recordings/<ingest_session_id>` (e.g., README with source URL)
+- [x] Add progress logging and frame count display
+- [x] Implement cleanup of temp download directory
+- [x] Create validation: extracted frame count matches expected count at given FPS
+- [x] Add smoke tests for URL validation, yt-dlp integration, and frame extraction
+
+### Review Findings
+
+- [ ] [Review][Patch] Reject non-finite FPS values before extraction [lagent/train/ingest.py:19]
+	`_positive_fps` accepts `nan`, `inf`, and overflowed numeric values because it only checks `fps <= 0`; `inf` reaches `expected_count` and raises `OverflowError` instead of producing a clear CLI validation error.
+- [ ] [Review][Patch] Remove incomplete recording directories when ingestion fails after creation [lagent/train/ingest.py:137]
+	Download succeeds before `_new_recording_dir` creates the output directory, so extraction or metadata-write failures leave partial `recordings/<session>/frames` directories behind. Those directories can be mistaken for valid downstream inputs and accumulate on repeated failures.
 
 ## Notes
 
@@ -108,3 +116,34 @@ YouTube ingestion is optional but valuable for expanding training datasets with 
 - NFR-1: All computation local; no cloud services, no credentials stored; only public data downloaded
 - NFR-2: Windows platform — yt-dlp and OpenCV are cross-platform; verify Windows compatibility in tests
 - Filename convention: recording directory naming matches epoch timestamp or deterministic URL hash for reproducibility
+
+## Dev Agent Record
+
+### Implementation Plan
+
+- Add lazy yt-dlp and OpenCV integrations so CLI startup remains usable when optional tools are absent.
+- Download into `TemporaryDirectory`, sample frame indices by timestamp, and write zero-padded PNGs matching Recording Mode.
+- Persist empty `inputs.jsonl` plus JSON source metadata and validate the expected extracted frame count.
+
+### Completion Notes
+
+- Implemented `ingest` CLI and reusable ingestion functions with URL/FPS validation and contextual download/extraction errors.
+- Added mocked smoke coverage for parsing, URL validation, download integration, frame extraction, output structure, metadata, and temporary-directory cleanup.
+- `compileall`, VS Code diagnostics, CLI help, `git diff --check`, and the stdlib mocked smoke harness pass. Full pytest execution is unavailable because pytest is not installed in the active environment.
+
+### File List
+
+- `lagent/train/ingest.py`
+- `lagent/train/__main__.py`
+- `tests/test_story_7_4_ingestion.py`
+- `pyproject.toml`
+- `_bmad-output/planning-artifacts/stories/7-4-youtube-frame-ingestion.md`
+- `_bmad-output/implementation-artifacts/sprint-status.yaml`
+
+### Change Log
+
+- 2026-08-26: Implemented YouTube-compatible video ingestion, frame extraction, recording metadata, CLI wiring, dependencies, and smoke tests.
+
+## Status
+
+review

@@ -6,6 +6,7 @@ Usage:
 Available subcommands:
     train — Fine-tune YOLO model from corrected Label Studio annotations and deploy atomically
     prelabel — Apply YOLO models to recorded frames and generate Label Studio annotations
+    ingest — Download a video and extract Recording Mode-compatible frames
 """
 
 from __future__ import annotations
@@ -129,6 +130,14 @@ def main() -> None:
         default="models",
         help="Root directory for YOLO models (default: models)",
     )
+    ingest_parser = subparsers.add_parser(
+        "ingest",
+        help="Download a public video and extract training frames",
+    )
+    ingest_parser.add_argument("--url", required=True, help="Public video URL supported by yt-dlp")
+    from lagent.train.ingest import _positive_fps
+    ingest_parser.add_argument("--fps", required=True, type=_positive_fps, help="Frames to extract per second")
+    ingest_parser.add_argument("--output-dir", type=Path, default=Path("recordings"))
     
     args = parser.parse_args()
     
@@ -162,6 +171,14 @@ def main() -> None:
         ]
         sys.argv = ["lagent.train", "prelabel"] + prelabel_args
         prelabel_command()
+
+    elif args.subcommand == "ingest":
+        from lagent.train.ingest import ingest_command
+        try:
+            ingest_command(args.url, args.fps, args.output_dir)
+        except Exception as exc:
+            logging.error("Ingestion command failed: %s", exc)
+            sys.exit(1)
 
 
 if __name__ == "__main__":
