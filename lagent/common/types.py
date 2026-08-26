@@ -131,6 +131,18 @@ class AgentProfile(BaseModel):
         description="Buff name to duration (seconds)"
     )
 
+    # PP buff Safety Check policy constants (frame-pixel radius + retry cadence)
+    aggro_risk_radius: float = Field(
+        default=150.0,
+        ge=0.0,
+        description="Maximum mob-to-PP distance in pixels before a timed buff cast is considered unsafe",
+    )
+    retry_interval: float = Field(
+        default=1.0,
+        ge=0.0,
+        description="Seconds to wait before re-evaluating a deferred PP buff cast",
+    )
+
     confidence_thresholds: Dict[str, Annotated[float, Field(ge=0.0, le=1.0)]] = Field(
         default_factory=dict,
         description="Named detection confidence thresholds",
@@ -202,3 +214,7 @@ class AgentProfile(BaseModel):
     @property
     def buff_durations(self) -> Dict[str, float]:
         return self.buff_timer_durations
+
+    @property
+    def buff_retry_interval(self) -> float:
+        return self.retry_interval

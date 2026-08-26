@@ -2,7 +2,7 @@
 storyId: 5.2
 epic: "Epic 5: Party Orchestration"
 title: "PP Buff Safety Check"
-status: backlog
+status: in-progress
 ---
 
 # Story 5.2: PP Buff Safety Check
@@ -75,7 +75,13 @@ The Safety Check must be deterministic and non-destructive: it evaluates only th
 
 ### Completion Notes
 
-- This story remains in backlog until the PP buff gating logic is implemented and proven in both pass/fail/retry scenarios.
+- This story remains in progress until the PP buff gating logic is wired into the live Prophet loop and proven in both pass/fail/retry scenarios.
+
+### Review Findings
+
+- [ ] [Review][Patch] Prophet runtime does not invoke the safety gate or implement timed buff casting and retry orchestration [lagent/agent/__main__.py:145] — `PPBuffSafetyCheck` and `ProphetBuffPolicy` are exported but have no production call site; non-fishing agents use a wait-only handler, and the runtime has no `GameState` provider for PP character and peer-state inputs, so AC-1, AC-4, and AC-5 are not functional in the live loop.
+- [x] [Review][Patch] Deferred-cast event failures are swallowed without preserving the required event contract [lagent/agent/prophet/__init__.py:69] — failures now set `event_logged` to `False` and emit an exception log so callers and operators can detect lost `buff_cast_deferred` records.
+- [x] [Review][Patch] Direct `PPBuffSafetyCheck` construction accepts invalid radius and retry values [lagent/agent/prophet/__init__.py:20] — constructors now reject negative and non-finite safety values before they can bypass profile validation or produce unusable retry timestamps.
 
 ## Change Log
 

@@ -10,6 +10,8 @@ skill_key_bindings:
   buff: "2"
 buff_timer_durations:
   haste: 300.0
+aggro_risk_radius: 150.0
+retry_interval: 1.0
 confidence_thresholds:
   default: 0.6
 confidence_threshold: 0.6

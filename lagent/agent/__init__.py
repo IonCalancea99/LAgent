@@ -16,6 +16,7 @@ from lagent.agent.startup import (
 )
 from lagent.agent.fishing_fsm import FishingFSM
 from lagent.agent.loop import AgentLoop
+from lagent.agent.prophet import PPBuffSafetyCheck, ProphetBuffPolicy
 
 
 def main() -> None:
@@ -37,4 +38,6 @@ __all__ = [
     "StartupProfileResolver",
     "scan_window",
     "validate_roi_positions",
+    "PPBuffSafetyCheck",
+    "ProphetBuffPolicy",
 ]

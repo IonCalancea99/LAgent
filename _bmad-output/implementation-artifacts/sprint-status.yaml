@@ -76,7 +76,7 @@ development_status:
   epic-4-retrospective: optional
   epic-5: backlog
   5-1-party-bus-partystate-pub-sub-exchange: backlog
-  5-2-pp-buff-safety-check: backlog
+  5-2-pp-buff-safety-check: in-progress
   5-3-orchestrator-heartbeat-monitor-session-halt: backlog
   epic-5-retrospective: optional
   epic-6: backlog
