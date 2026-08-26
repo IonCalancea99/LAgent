@@ -14,6 +14,7 @@ import logging
 from dataclasses import dataclass
 from enum import Enum
 from typing import Optional, Callable, List, Dict, Any
+from lagent.ui.state import UIState, SessionState, format_tooltip
 
 logger = logging.getLogger(__name__)
 
@@ -152,6 +153,15 @@ class Menu:
         self.status_overlay_toggle.label = f"Status Overlay: {status}"
         logger.debug(f"Status overlay toggled: {status}")
 
+    def apply_state(self, state: UIState) -> None:
+        """Project the canonical session state into menu enabled states."""
+        active = state.status in {SessionState.STARTING, SessionState.RUNNING, SessionState.RECORDING, SessionState.STOPPING}
+        self.start_session.enabled = not active and state.status != SessionState.UNKNOWN
+        self.stop_session.enabled = active and state.status != SessionState.STARTING
+        self.state.recording_mode_active = state.recording
+        status = "ON" if state.recording else "OFF"
+        self.recording_mode_toggle.label = f"Recording Mode: {status}"
+
 
 class TrayIcon:
     """System tray icon manager."""
@@ -167,6 +177,9 @@ class TrayIcon:
         self.menu = Menu()
         self._icon_instance = None
         self._stop_event = None
+        self.state = UIState()
+        self.icon_state = "idle"
+        self.tooltip = format_tooltip(self.state)
         
         logger.debug(f"TrayIcon initialized with icon: {icon_path}")
     
@@ -197,7 +210,7 @@ class TrayIcon:
         self.menu.start_session.register_callback("Shadow", on_start_shadow)
         
         self.menu.stop_session.callback = on_stop_session
-        self.menu.recording_mode_toggle.callback = self.menu.toggle_recording_mode
+        self.menu.recording_mode_toggle.callback = on_toggle_recording
         self.menu.status_overlay_toggle.callback = on_toggle_overlay
         self.menu.exit.callback = on_exit
         
@@ -310,8 +323,26 @@ class TrayIcon:
     
     def _invoke_recording_toggle(self) -> None:
         """Toggle recording mode and refresh menu display."""
-        self.menu.toggle_recording_mode()
+        self.menu.recording_mode_toggle.invoke()
         self._refresh_pystray_menu()
+
+    def update_state(self, state: UIState, now=None) -> None:
+        """Update icon accessibility text and menu from the canonical state."""
+        self.state = state
+        self.menu.apply_state(state)
+        self.tooltip = format_tooltip(state, now)
+        self.icon_state = {
+            SessionState.IDLE: "idle",
+            SessionState.STARTING: "active",
+            SessionState.RUNNING: "active",
+            SessionState.RECORDING: "recording",
+            SessionState.STOPPING: "active",
+            SessionState.HALTED: "halted",
+            SessionState.UNKNOWN: "unknown",
+        }[state.status]
+        if self._icon_instance is not None:
+            self._icon_instance.title = self.tooltip
+            self._refresh_pystray_menu()
     
     def _invoke_overlay_toggle(self) -> None:
         """Toggle overlay mode and refresh menu display."""

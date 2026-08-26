@@ -108,6 +108,24 @@ class TelemetryReader:
 
     read_snapshot = read
 
+    def latest_event_time(self, session_id: Optional[str]) -> Optional[datetime]:
+        """Return the latest runtime heartbeat/state timestamp for a session."""
+        if not session_id:
+            return None
+        try:
+            with sqlite3.connect(self.db_path, timeout=0.25) as connection:
+                row = connection.execute(
+                    """SELECT ts FROM events
+                       WHERE session_id = ?
+                       AND source IN ('agent.warlord', 'agent.prophet', 'orchestrator')
+                       ORDER BY id DESC LIMIT 1""",
+                    (session_id,),
+                ).fetchone()
+        except (sqlite3.Error, OSError) as exc:
+            logger.warning("Telemetry freshness read failed: %s", exc)
+            return None
+        return self._parse_timestamp(row[0]) if row else None
+
     def _snapshot_from_event(self, name, row, previous, elapsed, now):
         if row is None:
             retained = previous or AgentSnapshot(name)
@@ -360,3 +378,11 @@ class TelemetryLogger:
                 "details": details or {},
             }
         )
+
+    def log_recording_mode_changed(self, session_id: str, enabled: bool) -> int:
+        return self.db.append_event(session_id, "ui", "recording_mode_changed", {"enabled": enabled})
+
+    def log_session_halted(self, session_id: str, reason: str, event_id: Optional[str] = None) -> int:
+        return self.db.append_event(session_id, "ui", "session_halted", {
+            "reason": reason, "event_id": event_id or "session_halted",
+        })

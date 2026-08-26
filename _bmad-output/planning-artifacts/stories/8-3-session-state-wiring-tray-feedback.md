@@ -2,7 +2,8 @@
 storyId: 8.3
 epic: "Epic 8: Tray UI & Status Overlay"
 title: "Session State Wiring & Tray Feedback"
-status: ready-for-dev
+status: in-progress
+baseline_commit: 441485922e8ead0d449f84a2904f679d955bef68
 ---
 
 # Story 8.3: Session State Wiring & Tray Feedback
@@ -63,6 +64,13 @@ so that I can tell whether LAgent is idle, running, recording, or halted without
 - Recording Mode launch flag and agent behavior from Story 7.1.
 - `pystray` notification support or a Windows notification adapter.
 
+## Tasks/Subtasks
+
+- [x] Implement the reducer-backed session state model and tooltip formatting.
+- [x] Wire recording launch flags and orderly agent restart/rollback.
+- [x] Add halt/stale telemetry handling, tray projection, and notification adapter.
+- [ ] Add focused tests and run the full regression suite.
+
 ## Developer Context
 
 The tray must be a projection of session state, not a second source of truth. Define a small UI state model/reducer with explicit states such as IDLE, STARTING, RUNNING, RECORDING, STOPPING, HALTED, and UNKNOWN. Feed it process lifecycle results and database events, then render menu/icon/tooltip/notification from that model.
@@ -107,3 +115,35 @@ Ready for development. Ultimate context engine analysis completed - comprehensiv
 ## Change Log
 
 - 2026-08-26: Story created from Epic 8 specification.
+- 2026-08-26: Implemented reducer-backed tray state, recording restart/rollback, halt notifications, and focused tests. Runtime pytest/full regression remains blocked by missing `pytest` and `pydantic` dependencies.
+
+## Dev Agent Record
+
+### Implementation Plan
+
+- Keep session state in an immutable reducer model and render menu/icon/tooltip from it.
+- Treat recording as a launch-time Agent flag; restart only Agent children at a session boundary.
+- Use a headless notification adapter with per-session event deduplication.
+
+### Completion Notes
+
+- Added deterministic `IDLE`, `STARTING`, `RUNNING`, `RECORDING`, `STOPPING`, `HALTED`, and `UNKNOWN` state handling with stale-session rejection.
+- Added stable elapsed tooltips, stale preservation, tray icon state projection, and the required halt notification text.
+- Added recording launch arguments and rollback-safe Agent restart behavior with telemetry event methods.
+- `python3 -m py_compile ...` and `git diff --check` pass. Runtime tests could not run because `pytest` and `pydantic` are unavailable in the environment.
+
+### File List
+
+- `_bmad-output/planning-artifacts/stories/8-3-session-state-wiring-tray-feedback.md`
+- `lagent/ui/state.py`
+- `lagent/ui/notifications.py`
+- `lagent/ui/process_manager.py`
+- `lagent/ui/tray.py`
+- `lagent/ui/telemetry.py`
+- `lagent/ui/__main__.py`
+- `tests/test_story_8_3_session_state_wiring.py`
+- `_bmad-output/implementation-artifacts/sprint-status.yaml`
+
+### Change Log
+
+- 2026-08-26: Implementation is complete; runtime test gate remains pending environment dependencies.

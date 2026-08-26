@@ -95,5 +95,5 @@ development_status:
   epic-8: in-progress
   8-1-system-tray-icon-session-control-menu: ready-for-dev
   8-2-status-overlay-window: done
-  8-3-session-state-wiring-tray-feedback: ready-for-dev
+  8-3-session-state-wiring-tray-feedback: in-progress
   epic-8-retrospective: optional

@@ -12,6 +12,8 @@ Does not import agent/hsl/gpu_server modules (AD-5).
 import sys
 import logging
 import argparse
+import threading
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -26,8 +28,10 @@ logger = logging.getLogger(__name__)
 from lagent.common.sessions_db import SessionsDB
 from lagent.ui.tray import TrayIcon
 from lagent.ui.process_manager import ProcessManager
-from lagent.ui.telemetry import TelemetryLogger
+from lagent.ui.telemetry import TelemetryLogger, TelemetryReader
 from lagent.ui.overlay import StatusOverlay, QApplication
+from lagent.ui.notifications import NotificationAdapter
+from lagent.ui.state import UIEvent, UIState, reduce_state, SessionState
 
 
 class UIController:
@@ -39,6 +43,8 @@ class UIController:
         icon_path: Optional[str] = None,
         startup_timeout: float = 30.0,
         shutdown_timeout: float = 5.0,
+        telemetry_stale_after: float = 2.0,
+        monitor_interval: float = 0.5,
     ):
         """
         Initialize UI controller.
@@ -52,6 +58,8 @@ class UIController:
         self.db_path = db_path
         self.startup_timeout = startup_timeout
         self.shutdown_timeout = shutdown_timeout
+        self.telemetry_stale_after = telemetry_stale_after
+        self.monitor_interval = monitor_interval
         
         # Initialize components
         self.db = SessionsDB(db_path)
@@ -61,6 +69,9 @@ class UIController:
             shutdown_timeout=shutdown_timeout,
         )
         self.telemetry = TelemetryLogger(self.db)
+        self.telemetry_reader = TelemetryReader(db_path, stale_after=telemetry_stale_after)
+        self.notifications = NotificationAdapter()
+        self.state = UIState()
         
         # Default icon path
         if icon_path is None:
@@ -69,6 +80,8 @@ class UIController:
         self.tray = TrayIcon(icon_path=icon_path)
         self._overlay_app = None
         self.overlay = None
+        self._monitor_stop = threading.Event()
+        self._monitor_thread = None
         
         # Register menu callbacks
         self._setup_menu_callbacks()
@@ -138,11 +151,15 @@ class UIController:
     def _start_session(self, mode: str) -> None:
         """Start a session with the given mode."""
         try:
-            # Update menu state
             self.tray.menu.on_session_starting()
+            self.state = reduce_state(self.state, UIEvent("startup_started", "pending", {"mode": mode}))
             
             # Start the session
-            session_id = self.process_manager.start_session(mode)
+            session_id = self.process_manager.start_session(mode, self.tray.menu.state.recording_mode_active)
+            self.state = reduce_state(self.state, UIEvent("startup_started", session_id, {
+                "mode": mode, "profile": self.process_manager.current_session.profile,
+                "recording": self.tray.menu.state.recording_mode_active,
+            }))
             if self.overlay is not None:
                 self.overlay.session_id = session_id
             
@@ -155,6 +172,8 @@ class UIController:
             
             # Processes are running, enable Stop
             self.tray.menu.on_processes_registered()
+            self.state = reduce_state(self.state, UIEvent("startup_complete", session_id))
+            self.tray.update_state(self.state)
             
             # Log startup complete
             self.telemetry.log_startup_complete(session_id)
@@ -164,6 +183,8 @@ class UIController:
         except Exception as e:
             logger.error(f"Failed to start session: {e}")
             self.tray.menu.on_session_stopped()
+            self.state = UIState()
+            self.tray.update_state(self.state)
             
             # Log error
             try:
@@ -182,6 +203,8 @@ class UIController:
         try:
             self.process_manager.stop_session()
             self.tray.menu.on_session_stopped()
+            self.state = reduce_state(self.state, UIEvent("session_stopped", self.state.session_id))
+            self.tray.update_state(self.state)
             if self.overlay is not None:
                 self.overlay.session_id = None
             logger.info("Session stopped successfully")
@@ -191,7 +214,77 @@ class UIController:
     def _on_toggle_recording(self) -> None:
         """Handle Recording Mode toggle."""
         logger.info("User toggled Recording Mode")
-        self.tray.menu.toggle_recording_mode()
+        requested = not self.tray.menu.state.recording_mode_active
+        session = self.process_manager.current_session
+        if session is not None:
+            try:
+                self.process_manager.restart_recording(requested)
+                self.telemetry.log_recording_mode_changed(session.session_id, requested)
+            except Exception as exc:
+                self.state = reduce_state(self.state, UIEvent("recording_restart_failed", session.session_id))
+                self.tray.update_state(self.state)
+                try:
+                    self.telemetry.log_session_halted(session.session_id, "recording_restart_failed")
+                except Exception:
+                    logger.exception("Failed to log recording restart failure")
+                self.notifications.notify_halted(session.session_id, "recording_restart_failed")
+                logger.error("Recording restart failed: %s", exc)
+                return
+        self.tray.menu.state.recording_mode_active = requested
+        self.tray.menu.recording_mode_toggle.label = f"Recording Mode: {'ON' if requested else 'OFF'}"
+        if session is not None:
+            self.state = reduce_state(self.state, UIEvent("recording_started" if requested else "recording_stopped", session.session_id))
+        self.tray.update_state(self.state)
+
+    def handle_session_event(self, event: UIEvent) -> None:
+        """Apply an orchestrator/child event without blocking the tray callback."""
+        previous = self.state
+        self.state = reduce_state(self.state, event)
+        self.tray.update_state(self.state)
+        if self.state.status == SessionState.HALTED and previous.status != SessionState.HALTED:
+            event_id = self.state.halt_event_id or event.type
+            self.notifications.notify_halted(self.state.session_id, event_id)
+
+    def _monitor_once(self) -> None:
+        """Poll process and telemetry health without blocking tray callbacks."""
+        session = self.process_manager.current_session
+        if session is None or self.state.status not in {SessionState.RUNNING, SessionState.RECORDING}:
+            return
+        session_id = session.session_id
+        for process_name, process in session.processes.items():
+            if process.poll() is not None:
+                self.handle_session_event(UIEvent("child_exited", session_id, {
+                    "event_id": f"child_exited:{process_name}",
+                    "process": process_name,
+                    "returncode": process.returncode,
+                }))
+                try:
+                    self.telemetry.log_session_halted(session_id, "child_exited", f"child_exited:{process_name}")
+                except Exception:
+                    logger.exception("Failed to log child exit")
+                return
+        latest = self.telemetry_reader.latest_event_time(session_id)
+        stale = latest is None or (time.time() - latest.timestamp()) > self.telemetry_stale_after
+        self.handle_session_event(UIEvent("refresh_timeout" if stale else "telemetry_fresh", session_id))
+
+    def _monitor_loop(self) -> None:
+        while not self._monitor_stop.wait(self.monitor_interval):
+            try:
+                self._monitor_once()
+            except Exception:
+                logger.exception("Session health monitor failed")
+
+    def _start_monitor(self) -> None:
+        if self._monitor_thread is None or not self._monitor_thread.is_alive():
+            self._monitor_stop.clear()
+            self._monitor_thread = threading.Thread(target=self._monitor_loop, name="lagent-ui-monitor", daemon=True)
+            self._monitor_thread.start()
+
+    def _stop_monitor(self) -> None:
+        self._monitor_stop.set()
+        if self._monitor_thread is not None and self._monitor_thread is not threading.current_thread():
+            self._monitor_thread.join(timeout=max(1.0, self.monitor_interval * 2))
+        self._monitor_thread = None
     
     def _on_toggle_overlay(self) -> None:
         """Handle Status Overlay toggle."""
@@ -225,6 +318,7 @@ class UIController:
     def _on_exit(self) -> None:
         """Handle Exit."""
         logger.info("User selected Exit")
+        self._stop_monitor()
         
         # Stop session if running
         if self.process_manager.current_session:
@@ -251,6 +345,7 @@ class UIController:
         logger.info("Starting LAgent UI")
         
         try:
+            self._start_monitor()
             if QApplication is None:
                 self.tray.show()
             else:
@@ -259,6 +354,7 @@ class UIController:
             logger.error(f"Fatal error in UI: {e}", exc_info=True)
             sys.exit(1)
         finally:
+            self._stop_monitor()
             # Cleanup
             try:
                 self.db.close()

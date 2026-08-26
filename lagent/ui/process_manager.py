@@ -126,7 +126,7 @@ class ProcessManager:
         
         return self.PROFILE_CONFIGS[mode_lower]
     
-    def start_session(self, mode: str) -> str:
+    def start_session(self, mode: str, recording_mode: bool = False) -> str:
         """
         Start a new session with all child processes.
         
@@ -161,7 +161,7 @@ class ProcessManager:
         
         # Launch child processes
         try:
-            self._launch_child_processes(self.current_session, config)
+            self._launch_child_processes(self.current_session, config, recording_mode=recording_mode)
         except Exception as e:
             logger.error(f"Failed to launch child processes: {e}")
             self._rollback_startup(self.current_session)
@@ -170,7 +170,7 @@ class ProcessManager:
         
         return session_id
     
-    def _launch_child_processes(self, group: ProcessGroup, config: Dict[str, Any]) -> None:
+    def _launch_child_processes(self, group: ProcessGroup, config: Dict[str, Any], recording_mode: bool = False) -> None:
         """
         Launch all child processes for a session.
         
@@ -189,7 +189,7 @@ class ProcessManager:
                 raise TimeoutError(f"Startup timeout: {self.startup_timeout}s exceeded")
             
             try:
-                proc = self._launch_process(process_name, group.session_id, group.profile)
+                proc = self._launch_process(process_name, group.session_id, group.profile, recording_mode)
                 group.add_process(process_name, proc)
                 
                 # Wait to detect immediate failures (increased from 0.5s to 1.0s)
@@ -202,7 +202,23 @@ class ProcessManager:
                 logger.error(f"Failed to launch {process_name}: {e}")
                 raise
     
-    def _launch_process(self, process_name: str, session_id: str, profile: str) -> subprocess.Popen:
+    def build_process_command(self, process_name: str, session_id: str, profile: str, recording: bool = False) -> List[str]:
+        """Build a child command, adding recording only at Agent launch time."""
+        process_config = {
+            "gpu_server": {"module": "lagent.gpu_server", "args": ["--session-id", session_id]},
+            "warlord_agent": {"module": "lagent.agent", "args": ["--profile", profile, "--session-id", session_id, "--mode", "active"]},
+            "prophet_agent": {"module": "lagent.agent", "args": ["--profile", profile, "--session-id", session_id, "--mode", "active"]},
+            "orchestrator": {"module": "lagent.orchestrator", "args": ["--session-id", session_id]},
+        }
+        if process_name not in process_config:
+            raise ValueError(f"Unknown process: {process_name}")
+        config = process_config[process_name]
+        args = list(config["args"])
+        if recording and process_name.endswith("_agent"):
+            args.append("--record")
+        return [sys.executable, "-m", config["module"]] + args
+
+    def _launch_process(self, process_name: str, session_id: str, profile: str, recording: bool = False) -> subprocess.Popen:
         """
         Launch a single child process.
         
@@ -216,34 +232,8 @@ class ProcessManager:
         """
         # Map process name to module and entry point
         # Note: profile parameter from session config determines agent behavior
-        process_config = {
-            "gpu_server": {
-                "module": "lagent.gpu_server",
-                "args": ["--session-id", session_id],
-            },
-            "warlord_agent": {
-                "module": "lagent.agent",
-                "args": ["--profile", profile, "--session-id", session_id, "--mode", "active"],
-            },
-            "prophet_agent": {
-                "module": "lagent.agent",
-                "args": ["--profile", profile, "--session-id", session_id, "--mode", "active"],
-            },
-            "orchestrator": {
-                "module": "lagent.orchestrator",
-                "args": ["--session-id", session_id],
-            },
-        }
-        
-        if process_name not in process_config:
-            raise ValueError(f"Unknown process: {process_name}")
-        
-        config = process_config[process_name]
-        module = config["module"]
-        args = config["args"]
-        
         # Build command
-        cmd = [sys.executable, "-m", module] + args
+        cmd = self.build_process_command(process_name, session_id, profile, recording)
         
         logger.debug(f"Launching process {process_name}: {' '.join(cmd)}")
         
@@ -259,6 +249,28 @@ class ProcessManager:
         
         logger.info(f"Launched {process_name} with PID {proc.pid}")
         return proc
+
+    def restart_recording(self, recording: bool) -> str:
+        """Restart only Agent children at a session boundary with recording selected."""
+        if self.current_session is None:
+            raise RuntimeError("No session is running")
+        group = self.current_session
+        config = self.map_mode_to_profile(group.mode)
+        for name in ("warlord_agent", "prophet_agent"):
+            proc = group.processes.pop(name, None)
+            if proc is not None and proc.poll() is None:
+                proc.terminate()
+                try:
+                    proc.wait(timeout=self.shutdown_timeout)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+        try:
+            self._launch_child_processes(group, {"processes": ["warlord_agent", "prophet_agent"]}, recording_mode=recording)
+        except Exception:
+            self._rollback_startup(group)
+            self.current_session = None
+            raise
+        return group.session_id
     
     def _rollback_startup(self, group: ProcessGroup) -> None:
         """Terminate all started processes and log failure."""
