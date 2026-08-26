@@ -149,11 +149,13 @@ class CaptureThread(threading.Thread):
         fps: int = 10,
         max_queue_size: int = 2,
         log: logging.Logger | None = None,
+        on_frame: Any | None = None,
     ) -> None:
         super().__init__(daemon=True, name=f"capture-{window_title or 'window'}")
         self.window_title = window_title
         self.fps = fps
         self.logger = log or logger
+        self.on_frame = on_frame
         self.frame_queue: FrameQueue = FrameQueue(maxsize=max_queue_size)
         self._stop_event = threading.Event()
         self.backend_name, self.backend = resolve_capture_backend(window_title, fps, self.logger)
@@ -193,7 +195,10 @@ class CaptureThread(threading.Thread):
             started_at = time.monotonic()
             frame = self._capture_once()
             if frame is not None:
-                self.frame_queue.put_frame(frame)
+                if self.on_frame is None:
+                    self.frame_queue.put_frame(frame)
+                else:
+                    self.on_frame(frame)
 
             elapsed = time.monotonic() - started_at
             remaining = max(0.0, interval - elapsed)

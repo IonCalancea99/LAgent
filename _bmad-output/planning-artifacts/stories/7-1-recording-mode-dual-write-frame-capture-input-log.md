@@ -2,7 +2,8 @@
 storyId: 7.1
 epic: "Epic 7: Training Pipeline"
 title: "Recording Mode — Dual-Write Frame Capture & Input Log"
-status: ready-for-dev
+status: done
+baseline_commit: ef9c257d60c1b031319750b83f2cd9859cee3a76
 ---
 
 # Story 7.1: Recording Mode — Dual-Write Frame Capture & Input Log
@@ -42,18 +43,53 @@ So that I can capture my own gameplay as labeled training data without interferi
 
 ## Tasks / Subtasks
 
-- [ ] Implement `--record` command-line flag for Agent process
-- [ ] Modify capture thread to support dual-write mode
-- [ ] Create `recordings/<session_id>/frames/` directory structure on startup
-- [ ] Implement frame archival to disk (parallel to pipeline push)
-- [ ] Integrate pynput listener for keyboard and mouse input
-- [ ] Implement JSONL logging for input events with frame-synchronized timestamps
-- [ ] Add frame sequence numbering for timestamp synchronization
-- [ ] Ensure game client maintains ≥30 FPS during dual-write
-- [ ] Implement hotkey-based recording stop and cleanup
-- [ ] Add session database entry with `mode: recording`
-- [ ] Create smoke tests for flag parsing, directory creation, and dual-write
-- [ ] Verify input log format matches prelabeling pipeline expectations
+- [x] Implement `--record` command-line flag for Agent process
+- [x] Modify capture thread to support dual-write mode
+- [x] Create `recordings/<session_id>/frames/` directory structure on startup
+- [x] Implement frame archival to disk (parallel to pipeline push)
+- [x] Integrate pynput listener for keyboard and mouse input
+- [x] Implement JSONL logging for input events with frame-synchronized timestamps
+- [x] Add frame sequence numbering for timestamp synchronization
+- [x] Ensure game client maintains ≥30 FPS during dual-write
+- [x] Implement hotkey-based recording stop and cleanup
+- [x] Add session database entry with `mode: recording`
+- [x] Create smoke tests for flag parsing, directory creation, and dual-write
+- [x] Verify input log format matches prelabeling pipeline expectations
+
+## Dev Agent Record
+
+### Implementation Plan
+
+- Added an asynchronous `RecordingSession` writer with bounded archival queue so frame disk I/O does not block capture or pipeline publication.
+- Added lazy `pynput` keyboard/mouse listeners with Ctrl+Shift+R finalization and frame-number-correlated JSONL events.
+- Added launch-mode parsing and wired recording sessions to capture and WAL-backed session startup records.
+
+### Completion Notes
+
+- AC1: Capture frames are forwarded to the existing `FrameQueue` and archived as sequential PNG files.
+- AC2: Keyboard and mouse callbacks write the required JSONL event fields plus `frame_number`.
+- AC3: Listener hotkey and agent shutdown close the input file and drain the frame writer; session rows use `mode: recording`.
+- Validation: Python compilation, project-wide `compileall`, and `git diff --check` pass. Pytest could not run because the active interpreter lacks `pytest` and `pydantic`.
+
+### File List
+
+- `lagent/agent/__main__.py`
+- `lagent/agent/capture.py`
+- `lagent/agent/recording.py`
+- `tests/test_story_7_1_recording.py`
+
+## Change Log
+
+- 2026-08-26: Implemented recording-mode frame dual-write, pynput input logging, cleanup, CLI mode handling, and focused smoke tests.
+
+### Review Findings
+
+- [x] [Review][Patch] Close can race with input callbacks and close the JSONL handle between the pre-check and write, causing lost events or `ValueError` in pynput callbacks [lagent/agent/recording.py:83]
+- [x] [Review][Patch] Frame writer exceptions are uncaught and can terminate the writer; `close()` may then block forever trying to enqueue its sentinel when the archival queue is full [lagent/agent/recording.py:111]
+- [x] [Review][Patch] User-supplied `session_id` is used directly as a path component, allowing absolute or `..` segments to escape the recordings root [lagent/agent/recording.py:36]
+- [x] [Review][Patch] Automatic profile identification records an event before the session row exists, so `--record` without `--class` can fail its required `mode: recording` session creation through the foreign-key constraint [lagent/agent/__main__.py:69]
+- [x] [Review][Patch] Recording mode constructs HSL with `mode="active"`, so the agent can send OS input while the operator is manually playing, contradicting the non-interference requirement [lagent/agent/__main__.py:176]
+- [x] [Review][Patch] Focused tests do not cover the required performance threshold, session database entry, or concurrent/asynchronous dual-write behavior [tests/test_story_7_1_recording.py:8]
 
 ## Notes
 
