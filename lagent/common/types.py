@@ -6,7 +6,83 @@ No subsystem re-exports or redefines these contracts.
 """
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
+from enum import Enum
 from typing import Annotated, Any, Dict, List, Tuple
+
+
+class QuestResourceValidationError(ValueError):
+    """Raised when an external quest resource or profile cannot be safely used."""
+
+
+class DialogueChoice(BaseModel):
+    """A single dialogue option permitted by the quest contract."""
+    key: str = Field(description="Choice key or short code")
+    text: str = Field(description="Dialogue text shown to the player")
+    requires_confirmation: bool = Field(default=False, description="Whether this choice requires a confirmation step")
+
+
+class ObjectiveStep(BaseModel):
+    """A single ordered objective in the quest flow."""
+    order: int = Field(ge=1, description="One-based objective order")
+    id: str = Field(description="Stable objective identifier")
+    name: str = Field(description="Human-readable objective label")
+    target_npc: str = Field(description="NPC expected to be involved in this objective")
+    type: str = Field(description="Objective type such as dialogue or travel")
+    completion_indicators: List[str] = Field(default_factory=list, description="Signals that mark this objective complete")
+    dialogue_choice: str | None = Field(default=None, description="Dialogue option key used for this objective")
+    route_hint: str | None = Field(default=None, description="Optional navigation route hint")
+    timeout_seconds: float | None = Field(default=None, ge=0.0, description="Objective timeout in seconds")
+    retry_limit: int | None = Field(default=None, ge=0, description="Maximum retries for this objective")
+
+
+class QuestCheckpoint(BaseModel):
+    """A verified state boundary that must be met before the quest can proceed."""
+    name: str = Field(description="Checkpoint name")
+    required_state: str = Field(description="Required runtime condition")
+    safe_stop_on_failure: bool = Field(default=True, description="Whether this checkpoint halts the quest when invalid")
+    session_id: str = Field(default="", description="Session that owns this checkpoint")
+    quest_id: str = Field(default="", description="Quest contract identity")
+    objective_index: int = Field(default=0, ge=0, description="Verified zero-based objective index")
+    status: str = Field(default="pending", description="Checkpoint verification status")
+    verification_source: str = Field(default="", description="Evidence source that verified the boundary")
+    evidence: Dict[str, Any] = Field(default_factory=dict, description="Last positive evidence snapshot")
+
+
+class QuestResource(BaseModel):
+    """Canonical runtime contract for a selected quest resource."""
+    quest_id: str = Field(description="Stable quest identifier")
+    quest_name: str = Field(description="Human-readable quest name")
+    starting_npc: str = Field(description="NPC that initiates the quest")
+    objective_sequence: List[ObjectiveStep] = Field(default_factory=list, description="Ordered objective list")
+    dialogue_options: List[DialogueChoice] = Field(default_factory=list, description="Allowed dialogue choices")
+    navigation_route: List[str] = Field(default_factory=list, description="Route segments for the quest")
+    timeouts: Dict[str, float] = Field(default_factory=dict, description="Named timeout map")
+    retries: Dict[str, int] = Field(default_factory=dict, description="Named retry map")
+    safe_stop_conditions: List[str] = Field(default_factory=list, description="Conditions that trigger a safe stop")
+    completion_indicators: List[str] = Field(default_factory=list, description="Quest-level completion signals")
+
+
+class QuestPerceptionStatus(str, Enum):
+    """Fail-closed outcome of evaluating quest perception evidence."""
+
+    FOUND = "found"
+    NOT_FOUND = "not_found"
+    AMBIGUOUS = "ambiguous"
+    VERIFY_FAILED = "verify_failed"
+
+
+class QuestPerceptionEvidence(BaseModel):
+    """Normalized quest evidence emitted by the perception boundary."""
+
+    quest_id: str
+    evidence_type: str
+    status: QuestPerceptionStatus
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    raw_ocr_text: str | None = None
+    observed_value: str | None = None
+    selected_dialogue_key: str | None = None
+    objective_transition: bool = False
+    safe_terminal: bool = False
 
 
 class Detection(BaseModel):

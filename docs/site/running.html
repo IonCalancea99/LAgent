@@ -100,6 +100,18 @@ lagent-ui</code></pre>
       per agent: current FSM state label, HP% bar, MP% bar, and session timer. Toggle it from
       the tray menu or its hotkey. It is intentionally lightweight — no heavy rendering runs on
       the live session's critical path.</p>
+    <p>When the active session emits Epic 9 quest events, the overlay and tray tooltip also show
+      the quest name, current objective, objective progress, and running/paused/complete/failed
+      status. Failure projections include an operator-readable safe-stop reason. See
+      <a href="quest-mode.html#monitor">Monitor quest status</a> for examples.</p>
+
+    <div class="callout info">
+      <strong class="callout-title">Quest Mode launch status</strong>
+      The Supply Check engine and acceptance workflow are implemented, but Quest Mode is not yet
+      exposed as a tray profile or <code>--class</code> option. Follow the
+      <a href="quest-mode.html#validate">shadow replay validation</a> instead of attempting to
+      launch it from the commands above.
+    </div>
 
     <h2 id="stopping">Stopping a session</h2>
     <p>A session ends in one of three ways:</p>

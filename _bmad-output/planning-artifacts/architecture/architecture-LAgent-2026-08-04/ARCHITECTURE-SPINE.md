@@ -274,6 +274,12 @@ data/
 | YouTube ingestion (FR-22) | `lagent.train.ingest` | AD-6 |
 | Shadow Mode (FR-24) | `lagent.hsl` (suppresses OS call, logs shaped action) | AD-8 |
 | Fishing Mode loop (FR-25) | `lagent.agent.warlord` FSM states | AD-4 |
+| Quest resource discovery (FR-26) | `lagent.agent.quest` Lineage resource adapter | AD-4, AD-12 |
+| Supply Check conversational execution (FR-27) | `lagent.agent.quest` Quest FSM | AD-4, AD-8, AD-12 |
+| Quest perception and completion verification (FR-28) | `lagent.gpu_server.inference` + quest policy | AD-2, AD-10 |
+| Quest failure and lifecycle recovery (FR-29) | `lagent.agent.quest`, session telemetry | AD-4, AD-9 |
+
+Quest Mode is a V1 capability. Phase 1 is single-agent Orc Fighter behavior for Supply Check, beginning with NPC Marcela in Kamael village. Quest metadata is scraped from `lineage.ru`, parsed into a validated internal contract, and cached locally. The Quest FSM must fail closed when the resource is unavailable or malformed; it must not guess dialogue or objective actions. Objective transitions require positive perception evidence, and navigation/interaction retries are bounded. Detailed quest state remains agent-owned; no PartyState extension is required for Phase 1.
 
 ## Deferred
 

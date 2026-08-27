@@ -16,6 +16,7 @@ import math
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime
+from enum import Enum
 from typing import Optional, Dict, Any, List
 
 logger = logging.getLogger(__name__)
@@ -60,6 +61,43 @@ class AgentSnapshot:
         return format_elapsed(self.elapsed_seconds)
 
 
+class QuestStatus(str, Enum):
+    IDLE = "idle"
+    RUNNING = "running"
+    PAUSED = "paused"
+    COMPLETE = "complete"
+    FAILED = "failed"
+
+
+@dataclass
+class QuestSnapshot:
+    quest_name: Optional[str] = None
+    current_objective: Optional[str] = None
+    objective_index: Optional[int] = None
+    total_objectives: Optional[int] = None
+    status: QuestStatus = QuestStatus.IDLE
+    failure_reason: Optional[str] = None
+    event_sequence: int = -1
+
+
+def format_quest_summary(snapshot: QuestSnapshot) -> str:
+    """Format a compact operator-facing quest status string."""
+
+    if snapshot.status is QuestStatus.IDLE or not snapshot.quest_name:
+        return ""
+    objective = snapshot.current_objective or "Objective"
+    if snapshot.objective_index is not None and snapshot.total_objectives:
+        progress = f"{snapshot.objective_index + 1}/{snapshot.total_objectives}"
+    else:
+        progress = "--"
+    status = snapshot.status.value.capitalize()
+    summary = f"{snapshot.quest_name} · {objective} · {progress} · {status}"
+    if snapshot.status is QuestStatus.FAILED and snapshot.failure_reason:
+        reason = snapshot.failure_reason.replace("_", " ").capitalize().replace("Npc", "NPC")
+        summary = f"{summary} · {reason}"
+    return summary
+
+
 class TelemetryReader:
     """Read-only, short-lived SQLite reader for overlay state snapshots."""
 
@@ -70,6 +108,7 @@ class TelemetryReader:
         self.stale_after = stale_after
         self.clock = clock or datetime.now
         self._snapshots: Dict[str, AgentSnapshot] = {}
+        self._session_id: Optional[str] = None
 
     def read(self, session_id: Optional[str] = None, now: Optional[datetime] = None) -> Dict[str, AgentSnapshot]:
         current = now or self.clock()
@@ -107,6 +146,63 @@ class TelemetryReader:
         return snapshots
 
     read_snapshot = read
+
+    def read_quest(self, session_id: Optional[str]) -> QuestSnapshot:
+        """Project ordered quest events for one session without mutating runtime state."""
+
+        snapshot = QuestSnapshot()
+        if not session_id:
+            return snapshot
+        try:
+            with sqlite3.connect(self.db_path, timeout=0.25) as connection:
+                rows = connection.execute(
+                    """SELECT id, type, payload_json FROM events
+                       WHERE session_id = ? AND source = 'agent.quest'
+                       AND type IN ('quest_transition', 'quest_checkpoint', 'quest_failure', 'quest_recovery')
+                       ORDER BY id ASC""",
+                    (session_id,),
+                ).fetchall()
+        except (sqlite3.Error, OSError) as exc:
+            logger.warning("Quest telemetry read failed: %s", exc)
+            return snapshot
+
+        for event_id, event_type, payload_json in rows:
+            try:
+                payload = json.loads(payload_json)
+                if not isinstance(payload, dict):
+                    continue
+            except (TypeError, json.JSONDecodeError):
+                continue
+            sequence = payload.get("event_sequence", event_id)
+            if not isinstance(sequence, int) or sequence <= snapshot.event_sequence:
+                continue
+            snapshot.event_sequence = sequence
+            snapshot.quest_name = payload.get("quest_name", snapshot.quest_name)
+            snapshot.current_objective = payload.get("objective_name", snapshot.current_objective)
+            snapshot.objective_index = payload.get("objective_index", snapshot.objective_index)
+            snapshot.total_objectives = payload.get("total_objectives", snapshot.total_objectives)
+
+            if event_type == "quest_transition":
+                state = str(payload.get("state", "")).casefold()
+                snapshot.status = {
+                    "paused": QuestStatus.PAUSED,
+                    "complete": QuestStatus.COMPLETE,
+                    "safe_stop": QuestStatus.FAILED,
+                }.get(state, QuestStatus.RUNNING)
+                snapshot.failure_reason = payload.get("terminal_result") if snapshot.status is QuestStatus.FAILED else None
+            elif event_type == "quest_failure":
+                snapshot.status = QuestStatus.FAILED
+                snapshot.failure_reason = payload.get("reason")
+            elif event_type == "quest_recovery":
+                recovery_state = payload.get("state")
+                snapshot.status = {
+                    "safe_stop": QuestStatus.FAILED,
+                    "complete": QuestStatus.COMPLETE,
+                }.get(recovery_state, QuestStatus.RUNNING)
+                snapshot.failure_reason = payload.get("reason") if snapshot.status is QuestStatus.FAILED else None
+            elif event_type == "quest_checkpoint":
+                snapshot.status = QuestStatus.RUNNING
+        return snapshot
 
     def latest_event_time(self, session_id: Optional[str]) -> Optional[datetime]:
         """Return the latest runtime heartbeat/state timestamp for a session."""

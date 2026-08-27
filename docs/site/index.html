@@ -11,7 +11,7 @@
   <button id="navToggle" aria-label="Toggle navigation">☰</button>
   <div class="brand">🤖 LAgent Docs</div>
   <div class="search-wrap">
-    <input id="searchInput" type="text" placeholder="Search docs… (installation, profiles, CLI, training…)" autocomplete="off" />
+    <input id="searchInput" type="text" placeholder="Search docs… (installation, quests, CLI, training…)" autocomplete="off" />
     <div id="searchResults" class="search-results"></div>
   </div>
   <button id="themeToggle" aria-label="Toggle theme">🌓</button>
@@ -40,7 +40,9 @@
       <strong class="callout-title">Use this guide in order</strong>
       Start with <a href="installation.html">Installation</a>, then
       <a href="preparation.html">Preparation &amp; Config</a>, then
-      <a href="running.html">Running LAgent</a>. Come back to
+      <a href="running.html">Running LAgent</a>. To validate the Epic 9 Supply Check flow,
+      continue to <a href="quest-mode.html">Quest Mode</a>. Once you need to grow a fresh character,
+      see <a href="class-flows.html">Class Leveling Flows</a>. Come back to
       <a href="training.html">Training</a> once you need to record data and produce your own
       models, and use <a href="architecture.html">Architecture</a> as a reference map of the
       whole system.
@@ -62,6 +64,16 @@
         <h3>▶️ Running LAgent</h3>
         <p>Tray/UI launcher, session modes, CLI flags, status overlay, shutdown.</p>
         <a href="running.html">Go to Running →</a>
+      </div>
+      <div class="card">
+        <h3>📜 Quest Mode</h3>
+        <p>Validate Supply Check, understand live gating, checkpoints, safe stops, and quest telemetry.</p>
+        <a href="quest-mode.html">Go to Quest Mode →</a>
+      </div>
+      <div class="card">
+        <h3>🧭 Class Leveling Flows</h3>
+        <p>Grow a fresh character through professions and gate quests via milestones.</p>
+        <a href="class-flows.html">Go to Class Flows →</a>
       </div>
       <div class="card">
         <h3>🎓 Training Pipeline</h3>
@@ -98,6 +110,8 @@
     <p>
       A lightweight Party Bus (ZeroMQ PUB/SUB) keeps the Prophet's buff cycle and the Warlord's
       combat state in sync, and an Orchestrator process monitors heartbeats from both agents.
+      The bounded Supply Check quest uses the same perception, FSM, HSL, lifecycle, and session
+      telemetry foundations for a single-agent conversational flow.
     </p>
 
     <h2 id="requirements">System requirements</h2>

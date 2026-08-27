@@ -1,0 +1,76 @@
+{
+  "marcela": {
+    "evidence_type": "npc",
+    "target": "Marcela",
+    "confidence": 0.97
+  },
+  "npc_missing": {
+    "evidence_type": "npc",
+    "target": "",
+    "confidence": 0.0
+  },
+  "npc_blurred": {
+    "evidence_type": "npc",
+    "target": "Marcela",
+    "confidence": 0.41,
+    "occluded": true
+  },
+  "objective": {
+    "evidence_type": "objective",
+    "raw_ocr_text": "Supply Check: Speak to Marcela",
+    "expected_text": "Speak to Marcela",
+    "confidence": 0.95
+  },
+  "objective_occluded": {
+    "evidence_type": "objective",
+    "raw_ocr_text": "Supply Ch...",
+    "expected_text": "Speak to Marcela",
+    "confidence": 0.58,
+    "occluded": true
+  },
+  "interaction_prompt": {
+    "evidence_type": "interaction_prompt",
+    "raw_ocr_text": "Talk to Marcela",
+    "expected_text": "Talk to Marcela",
+    "confidence": 0.93
+  },
+  "prompt_low_confidence": {
+    "evidence_type": "interaction_prompt",
+    "raw_ocr_text": "Talk to Marcela",
+    "expected_text": "Talk to Marcela",
+    "confidence": 0.44
+  },
+  "dialogue": {
+    "evidence_type": "dialogue",
+    "raw_ocr_text": "I am here for the supply check.",
+    "choice_key": "supply_check",
+    "confidence": 0.96
+  },
+  "dialogue_occluded": {
+    "evidence_type": "dialogue",
+    "raw_ocr_text": "I am here for the supply...",
+    "choice_key": "supply_check",
+    "confidence": 0.72,
+    "occluded": true
+  },
+  "dialogue_low_confidence": {
+    "evidence_type": "dialogue",
+    "raw_ocr_text": "I am here for the supply check.",
+    "choice_key": "supply_check",
+    "confidence": 0.39
+  },
+  "completion": {
+    "evidence_type": "completion",
+    "raw_ocr_text": "Quest complete: Supply Check",
+    "objective_transition": true,
+    "explicit_completion": true,
+    "confidence": 0.98
+  },
+  "completion_missing": {
+    "evidence_type": "completion",
+    "raw_ocr_text": "Supply Check",
+    "objective_transition": true,
+    "explicit_completion": false,
+    "confidence": 0.94
+  }
+}

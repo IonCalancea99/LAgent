@@ -70,6 +70,9 @@ The immediate delivery target is the Asterios x55 server, with **Fishing automat
 - **ROI** (Region of Interest) — A defined sub-region of a game window (e.g., HP bar, buff icon strip, mob area) extracted per frame for targeted analysis.
 - **Fishing Mode** — The Phase 1 behavior profile: cast → wait → tension detection → reel.
 - **Combat Mode** — The V1 primary behavior profile: WL pull → AoE → loot; PP buff cycle + heal.
+- **Quest Mode** — A V1 behavior profile that discovers and executes a supported quest objective sequence from a Lineage resource. Phase 1 targets the conversational Supply Check quest beginning with NPC Marcela in Kamael village for a level-3 Orc Fighter.
+- **Quest Resource** — Parsed metadata obtained by scraping `lineage.ru`, including quest identity, NPCs, objective order, dialogue choices, and completion signals. Resource parsing and availability failures are fail-closed.
+- **Quest Objective** — A verified step in a quest sequence. The Agent must observe positive completion evidence before advancing.
 - **Fatigue Model** — A time-varying latency multiplier that increases action delays over a session to simulate human tiredness, with periodic "break" resets.
 - **Break** — A simulated pause period (5–15 minutes, no input) triggered by the Fatigue Model to mimic human rest patterns.
 
@@ -348,6 +351,48 @@ The Fishing Mode FSM shall: detect idle fishing state → cast rod → wait for 
 
 ---
 
+### 4.9 Behavior Profiles: Quest Mode (V1, Phase 1 Supply Check)
+
+**Description:** Quest Mode executes a bounded, conversational quest flow for a level-3 Orc Fighter. The Agent scrapes and parses quest metadata from `lineage.ru`, navigates to NPC Marcela in Kamael village, interacts through the discovered dialogue sequence, verifies objective progress and completion from perception, and stops safely when the quest state is ambiguous. Phase 1 does not require combat.
+
+**Functional Requirements:**
+
+#### FR-26: Quest resource discovery
+
+The Agent shall obtain the Supply Check quest definition from a configured `lineage.ru` web resource and parse the starting NPC, objective sequence, dialogue choices, route metadata, and completion criteria before issuing quest actions.
+
+**Consequences:**
+- The scraper uses a bounded request policy and local cache; unavailable, malformed, or stale data causes a safe stop rather than guessed actions.
+- The internal quest contract is validated before the Quest FSM starts.
+- Phase 1 supports the Marcela/Supply Check fixture and does not promise arbitrary quest support.
+
+#### FR-27: Conversational quest execution
+
+The Quest FSM shall execute the discovered Supply Check objective sequence for a level-3 Orc Fighter, including navigation to Marcela in Kamael village and profile- or resource-authorized dialogue interactions.
+
+**Consequences:**
+- Phase 1 is single-agent and strictly conversational; no combat action is required.
+- Each objective transition requires positive perception evidence before the next action sequence begins.
+- NPC and dialogue interactions have configurable timeouts and bounded retries.
+
+#### FR-28: Quest perception and completion verification
+
+The Perception Pipeline shall provide the most reliable available combination of stable UI/OCR signals and visual confirmation for NPC identity, dialogue choices, objective progress, and quest completion.
+
+**Consequences:**
+- The selected signal combination is documented and covered by deterministic replay fixtures.
+- Ambiguous or conflicting signals pause the Quest FSM and log the reason.
+
+#### FR-29: Quest failure and recovery
+
+The Agent shall log quest progress, navigation failures, interaction attempts, completion, and safe-stop causes. After death, disconnect, or restart, it shall resume only from a verified checkpoint or require operator intervention.
+
+**Consequences:**
+- Navigation and dialogue retries are bounded.
+- Quest actions never bypass HSL or existing session safety controls.
+
+---
+
 ## 5. Non-Goals (Explicit)
 
 - **No memory reading or packet inspection.** Zero interaction with L2 client internals, memory space, or network traffic — ever.
@@ -378,6 +423,7 @@ The Fishing Mode FSM shall: detect idle fishing state → cast rod → wait for 
 - Character identification on startup
 - Death detection and recovery (full party, ≤60 seconds)
 - Inventory-full detection and town return
+- Quest Mode: Phase 1 Supply Check conversation with NPC Marcela in Kamael village for a level-3 Orc Fighter, using dynamically scraped `lineage.ru` quest metadata
 - Session cap + clean shutdown
 - Party Orchestrator (ZeroMQ Party Bus)
 - YAML agent profile configuration
@@ -390,6 +436,7 @@ The Fishing Mode FSM shall: detect idle fishing state → cast rod → wait for 
 - Offline dancer coordination (BD/SWS): not planned — Asterios x55 does not support this mode
 - PvP response, zone selection, raid participation: indefinitely deferred
 - Cross-server support: not planned
+- Arbitrary quest discovery and execution beyond the Supply Check Phase 1 fixture
 
 ---
 
@@ -409,6 +456,8 @@ The Fishing Mode FSM shall: detect idle fishing state → cast rod → wait for 
 - **SM-6**: YouTube frame ingestion processes a 10-minute video in ≤5 minutes. Validates FR-22.
 - **SM-7**: Perception Pipeline inference latency ≤100 ms per frame per window. Validates FR-3.
 - **SM-8**: Phase 1 gate: Fishing Mode sustains a 1-hour uninterrupted session with no human input. Validates FR-25.
+- **SM-10**: Phase 1 Supply Check completion: the level-3 Orc Fighter completes the Marcela conversational quest without human input after a validated `lineage.ru` resource load. Validates FR-26 and FR-27.
+- **SM-11**: No unverified quest progression: every Supply Check objective transition has positive perception evidence, and ambiguous state produces a logged safe stop. Validates FR-28 and FR-29.
 
 **Counter-metrics (do not optimize)**
 
@@ -419,7 +468,8 @@ The Fishing Mode FSM shall: detect idle fishing state → cast rod → wait for 
 
 ## 8. Open Questions
 
-All design questions resolved. No open items.
+- Exact `lineage.ru` page structure and legal/access constraints for the scraper must be validated before implementation.
+- The final visual/OCR signal combination for Marcela, dialogue choices, objective progress, and completion must be selected from captured Asterios x55 fixtures.
 
 ---
 
@@ -437,3 +487,6 @@ All assumptions resolved and locked:
 | 6 | Offline dancer (BD/SWS) | Not applicable — Asterios x55 does not support offline dancer mode |
 | 7 | Session persistence | Session-fresh; no cross-session zone memory |
 | 8 | Shadow Mode | Good to have — included in V1 scope as FR-24 |
+| 9 | V1 quest fixture | Supply Check, beginning with NPC Marcela in Kamael village, executed by a level-3 Orc Fighter |
+| 10 | Quest resource | Scrape `lineage.ru`, parse and validate locally, cache results, and fail closed when unavailable |
+| 11 | Quest Phase 1 behavior | Strictly conversational; no combat behavior required |

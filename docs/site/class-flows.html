@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Class Leveling Flows · LAgent Docs</title>
+<link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+<header class="topbar">
+  <button id="navToggle" aria-label="Toggle navigation">☰</button>
+  <div class="brand">🤖 LAgent Docs</div>
+  <div class="search-wrap">
+    <input id="searchInput" type="text" placeholder="Search docs…" autocomplete="off" />
+    <div id="searchResults" class="search-results"></div>
+  </div>
+  <button id="themeToggle" aria-label="Toggle theme">🌓</button>
+</header>
+
+<div class="layout">
+  <nav id="sidebar" class="sidebar"></nav>
+
+  <main class="content">
+    <h1>Class Leveling Flows</h1>
+    <p>A <strong>class flow</strong> is the ordered instruction set that grows a fresh
+      character from creation through its early professions and gate quests until it is
+      ready to hand off to a standing farming profile such as <code>warlord.yaml</code> or
+      <code>prophet.yaml</code>. This page covers the anatomy of a flow, how to author a new
+      one, a worked example, and how to recover when a flow drifts off course.</p>
+
+    <div class="callout info">
+      <strong class="callout-title">Not the same as the Training Pipeline</strong>
+      <a href="training.html">Training Pipeline</a> trains the YOLO vision models the agent
+      sees with. A <em>class flow</em> is about training (leveling) a character —
+      the two are unrelated and can be worked on independently.
+    </div>
+
+    <div class="callout warn">
+      <strong class="callout-title">Quest steps still need a human in the loop</strong>
+      LAgent has no dialogue-parsing or quest-scripting engine today. A class flow's grind
+      phases can run under the same FSM/profile machinery as regular farming, but profession
+      changes and gate-quest turn-ins should be treated as supervised checkpoints — run them
+      in <a href="running.html#modes">Shadow Mode</a> or handle the dialogue yourself, then
+      let the agent resume the grind once the checkpoint is confirmed.
+    </div>
+
+    <h2 id="concept">Anatomy of a class flow</h2>
+    <p>A flow is a short list of <strong>milestones</strong>. Each milestone bundles a level
+      target with the goals, prep work, and verification needed before the next one starts:</p>
+    <div class="pipeline">
+      <div class="step">Grind to target level</div>
+      <span class="sep">→</span>
+      <div class="step">Run milestone goal(s)</div>
+      <span class="sep">→</span>
+      <div class="step">Verify completion</div>
+      <span class="sep">→</span>
+      <div class="step">Prep for next milestone</div>
+    </div>
+    <table>
+      <thead><tr><th>Field</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td><code>target_level</code></td><td>Character level that closes out this milestone</td></tr>
+        <tr><td><code>grind_profile</code></td><td>Which existing combat/support profile (and mob area override) drives XP gain for this level range</td></tr>
+        <tr><td><code>goals</code></td><td>What else must happen at this milestone — e.g. a profession change, a gate quest, a stat/skill allocation</td></tr>
+        <tr><td><code>verify</code></td><td>How completion is confirmed — OCR of the level/class label, an inventory check, a quest-tracker read</td></tr>
+        <tr><td><code>prep_checklist</code></td><td>What must be true before the <em>next</em> milestone can safely start — items, adena, location, NPC access</td></tr>
+        <tr><td><code>on_fail</code></td><td>What to do if <code>verify</code> doesn't pass — retry, pause and alert, or fall back to a safer grind loop</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="add-flow">Adding a new class flow, step by step</h2>
+    <ol>
+      <li><strong>Map the milestones first, on paper.</strong> List every level target, profession
+        change, and gate quest in order before writing any config — this is the cheapest place
+        to catch a wrong sequence.</li>
+      <li><strong>Author the flow file</strong> alongside the existing profiles, e.g.
+        <code>profiles/flows/&lt;class&gt;.flow.yaml</code>, using the milestone fields above.</li>
+      <li><strong>Reuse an existing combat profile for each grind phase.</strong> Point
+        <code>grind_profile</code> at a copy of <code>warlord.yaml</code> or
+        <code>prophet.yaml</code> with ROIs and <code>mob_area</code> tuned to the
+        level-appropriate hunting zone — don't reinvent FSM bindings per milestone.</li>
+      <li><strong>Write each gate quest as an explicit, supervised checklist</strong> (NPC,
+        location, items to turn in) rather than an automated action script, per the caveat
+        above.</li>
+      <li><strong>Define <code>verify</code> before you define <code>prep_checklist</code>.</strong>
+        If you can't state how the agent (or you) will know the milestone is done, the
+        milestone is too vague.</li>
+      <li><strong>Dry-run the whole flow in Shadow Mode</strong> before letting it run
+        unattended, and again after any change to a milestone.</li>
+      <li><strong>Define the handoff.</strong> State explicitly which standing profile takes
+        over once the flow's last milestone is verified, so the character doesn't sit idle
+        in a flow that has nothing left to do.</li>
+    </ol>
+
+    <h2 id="example">Worked example — Destroyer to level 28, first profession, level 29 prep</h2>
+    <p>A flow to take a fresh Destroyer from creation through its first profession and stage
+      it for the level 29 laboratory gate:</p>
+    <table>
+      <thead><tr><th>Milestone</th><th>Target level</th><th>Goals</th><th>Verify</th><th>Prep for next</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>A — Early grind</td>
+          <td>20</td>
+          <td>Grind on <code>grind_profile: destroyer_low</code> in a level-appropriate zone; complete the first-profession quest chain</td>
+          <td>Character sheet shows the post-profession class name and level ≥ 20</td>
+          <td>Confirm skill bar reflects the new profession's key bindings before resuming the grind</td>
+        </tr>
+        <tr>
+          <td>B — Mid grind</td>
+          <td>28</td>
+          <td>Continue grinding on the same profile, widening <code>mob_area</code>/hunting zone as level rises</td>
+          <td>Level reads 28 for two consecutive status checks (avoids acting on a stale OCR read)</td>
+          <td>Build the level 29 laboratory prep checklist below</td>
+        </tr>
+        <tr>
+          <td>C — Laboratory prep (at 28)</td>
+          <td>28 (gate)</td>
+          <td>Gather required quest materials, reserve adena for the laboratory fee, travel to the laboratory NPC, save a checkpoint</td>
+          <td>Inventory check confirms materials + adena reserve; agent is stationed at the laboratory NPC</td>
+          <td>Hand off to the level 29 laboratory milestone/flow segment once the character actually hits 29</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>Sketch of the flow file for the example above:</p>
+    <pre><code>name: destroyer_leveling
+handoff_profile: warlord   # profile to switch to once this flow's milestones are done
+milestones:
+  - id: first_profession
+    target_level: 20
+    grind_profile: profiles/flows/destroyer_low.yaml
+    goals: ["first_profession_quest"]
+    verify: {type: class_label_ocr, expect: "Destroyer"}
+    prep_checklist: ["confirm skill_key_bindings updated for new profession"]
+
+  - id: grind_to_28
+    target_level: 28
+    grind_profile: profiles/flows/destroyer_low.yaml
+    goals: []
+    verify: {type: level_ocr, expect: 28, confirmations_required: 2}
+    prep_checklist:
+      - "gather laboratory quest materials"
+      - "reserve adena for laboratory fee"
+      - "travel to laboratory NPC"
+
+  - id: laboratory_29_gate
+    target_level: 28
+    goals: ["laboratory_prep"]
+    verify: {type: inventory_check, items: ["lab_material_a", "lab_material_b"], min_adena: 50000}
+    on_fail: {action: pause_and_alert}
+    prep_checklist: ["hand off to level_29 flow segment once level reads 29"]</code></pre>
+    <div class="callout ok">
+      <strong class="callout-title">Keep the gate as its own milestone</strong>
+      Treating the level 29 laboratory prep as a distinct milestone (rather than folding it
+      into the grind-to-28 milestone) makes it trivial to pause right before the gate for a
+      supervised turn-in, without touching the grind logic above it.
+    </div>
+
+    <h2 id="generic-template">Generic class flow template</h2>
+    <p>Copy this skeleton for any new class and fill in the blanks:</p>
+    <pre><code>name: &lt;class&gt;_leveling
+handoff_profile: &lt;standing profile to switch to once done&gt;
+milestones:
+  - id: &lt;short_id&gt;
+    target_level: &lt;level&gt;
+    grind_profile: &lt;path to a profile tuned for this level range&gt;
+    goals: [&lt;profession change, gate quest, stat allocation, ...&gt;]
+    verify: {type: &lt;class_label_ocr|level_ocr|inventory_check|...&gt;, ...}
+    prep_checklist: [&lt;what must be true before the next milestone&gt;]
+    on_fail: {action: &lt;retry|pause_and_alert|fallback_grind&gt;}
+  # repeat one block per milestone, in level order</code></pre>
+
+    <h2 id="rectify">Rectifying a flow that's going wrong</h2>
+    <p>Signals a flow has drifted off course:</p>
+    <ul>
+      <li>Level or session time climbing with no matching goal progress (stuck on a grind loop past its milestone)</li>
+      <li>Repeated deaths or returns-to-town in the same spot</li>
+      <li>The FSM sitting in one state far longer than <code>fsm_bindings</code> timeouts suggest it should</li>
+      <li>A <code>verify</code> check failing over and over (e.g. OCR never reads the expected class/level)</li>
+      <li>The agent acting on the wrong skill bar after a profession change</li>
+    </ul>
+    <p>Diagnose before changing anything:</p>
+    <ol>
+      <li>Check the <a href="running.html#status-overlay">Status Overlay</a> for current FSM state, HP/MP, and elapsed time.</li>
+      <li>Query recent rows in <code>data/sessions.db</code>'s <code>events</code> table for the session to see the actual state/transition history.</li>
+      <li>If it was recorded, review the footage under <code>recordings/</code> for the exact moment things went wrong.</li>
+      <li>Reproduce the same milestone in <a href="running.html#modes">Shadow Mode</a> to confirm the fix before trusting it unattended.</li>
+    </ol>
+    <table>
+      <thead><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr></thead>
+      <tbody>
+        <tr><td>Stuck grinding past the milestone's target level</td><td><code>verify</code> condition never matches (bad OCR ROI, wrong expected string)</td><td>Re-check the ROI/expected value against a fresh screenshot; widen the confidence threshold if OCR is marginal</td></tr>
+        <tr><td>Agent dies repeatedly in the same spot</td><td><code>grind_profile</code>'s mob area/level range is too aggressive for the current level</td><td>Narrow <code>mob_area</code> or point at an easier hunting zone for that milestone</td></tr>
+        <tr><td>Wrong skill firing after a profession change</td><td><code>skill_key_bindings</code> weren't updated for the new profession's skill bar</td><td>Update the grind profile's bindings as part of that milestone's <code>prep_checklist</code></td></tr>
+        <tr><td>Agent idles at the gate quest indefinitely</td><td>A quest/profession goal was left for automated handling with no engine to do it</td><td>Treat the goal as a supervised checkpoint per the caveat above; resume the flow once you've completed it manually</td></tr>
+        <tr><td>Milestone marked complete too early</td><td><code>verify</code> accepted a stale or noisy single read</td><td>Require multiple consecutive confirmations before accepting completion (see <code>confirmations_required</code> in the example above)</td></tr>
+      </tbody>
+    </table>
+    <div class="callout warn">
+      <strong class="callout-title">Stop before you patch</strong>
+      Use the tray's Stop Session before editing a flow or profile file that's mid-run —
+      never hot-edit a YAML file a running process may re-read.
+    </div>
+
+    <h2 id="more-examples">More class flows worth authoring first</h2>
+    <div class="cards">
+      <div class="card">
+        <h3>Fighter → tank/support lane</h3>
+        <p>Level 1–20 grind, first profession into a tanking archetype, prep checklist for
+          pairing with a support caster once it joins a party.</p>
+      </div>
+      <div class="card">
+        <h3>Mystic → support caster</h3>
+        <p>Level 1–20 grind, first profession into a buff/heal-oriented class, prep checklist
+          for feeding into an existing buff rotation such as the Prophet's.</p>
+      </div>
+      <div class="card">
+        <h3>Crafting-oriented fighter</h3>
+        <p>Same level-1–20 shape, but the prep checklist swaps quest items for recipes and
+          raw materials — useful for validating that <code>prep_checklist</code> generalizes
+          beyond combat gates.</p>
+      </div>
+      <div class="card">
+        <h3>Second archetype, same template</h3>
+        <p>Re-run the Destroyer example's exact milestone shape for a second class with
+          different <code>grind_profile</code>/<code>mob_area</code> values, to prove the
+          template is reusable rather than one-off.</p>
+      </div>
+    </div>
+
+    <div class="page-nav"></div>
+  </main>
+
+  <aside id="toc" class="toc"></aside>
+</div>
+
+<script src="assets/search-index.js"></script>
+<script src="assets/app.js" data-page="class-flows"></script>
+</body>
+</html>

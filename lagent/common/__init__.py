@@ -16,6 +16,13 @@ from lagent.common.types import (
     Detection,
     Action,
     AgentProfile,
+    DialogueChoice,
+    ObjectiveStep,
+    QuestCheckpoint,
+    QuestPerceptionEvidence,
+    QuestPerceptionStatus,
+    QuestResource,
+    QuestResourceValidationError,
 )
 
 __all__ = [
@@ -25,4 +32,11 @@ __all__ = [
     "Detection",
     "Action",
     "AgentProfile",
+    "DialogueChoice",
+    "ObjectiveStep",
+    "QuestCheckpoint",
+    "QuestPerceptionEvidence",
+    "QuestPerceptionStatus",
+    "QuestResource",
+    "QuestResourceValidationError",
 ]

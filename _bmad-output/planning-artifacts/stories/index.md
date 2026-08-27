@@ -52,6 +52,17 @@ This folder is the single place for story artifacts used during implementation p
 - 8.2 Status Overlay Window
 - 8.3 Session State Wiring & Tray Feedback
 
+## Epic 9 - Quest Mode
+
+- 9.1 Lineage Resource Adapter & Validated Quest State/Profile Contract
+- 9.2 Supply Check Perception Fixtures for Marcela, Dialogue, Objectives, and Completion
+- 9.3 Deterministic Quest FSM & Positive Objective Verification
+- 9.4 Resource-Driven Kamael Village Navigation & Stuck Detection
+- 9.5 Marcela Interaction & Dialogue Selection with Bounded Retries
+- 9.6 Quest Checkpoint, Failure, and Lifecycle Recovery
+- 9.7 Quest Telemetry & Tray/Overlay Status
+- 9.8 Shadow-Mode & Live Supply Check Acceptance Fixture
+
 ## Naming Convention
 
 Story files are named `<epic>-<story>-<slug>.md`, for example `3-1-bezier-mouse-path-generator.md`.

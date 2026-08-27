@@ -2,7 +2,7 @@
 
 from typing import Optional
 
-from lagent.ui.telemetry import AgentSnapshot, TelemetryReader
+from lagent.ui.telemetry import AgentSnapshot, TelemetryReader, format_quest_summary
 
 try:
     from PyQt6.QtCore import Qt, QObject, QRunnable, QThreadPool, QTimer, pyqtSignal
@@ -35,7 +35,8 @@ if QApplication is not None:
         def run(self):
             try:
                 snapshots = self.reader.read(self.session_id)
-                self.signals.completed.emit(self.session_id, snapshots)
+                quest = self.reader.read_quest(self.session_id)
+                self.signals.completed.emit(self.session_id, (snapshots, quest))
             except Exception:
                 self.signals.completed.emit(self.session_id, {})
 
@@ -78,14 +79,16 @@ if QApplication is not None:
             self.reader = TelemetryReader(db_path)
             self.session_id = session_id
             self.rows = {name: AgentRow(name, self) for name in ("WL", "PP")}
+            self.quest_label = QLabel("")
             layout = QGridLayout(self)
             layout.setContentsMargins(6, 6, 6, 6)
             layout.addWidget(self.rows["WL"], 0, 0)
             layout.addWidget(self.rows["PP"], 1, 0)
+            layout.addWidget(self.quest_label, 2, 0)
             self.setWindowFlags(native_overlay_flags())
             self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
             self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
-            self.setFixedSize(300, 160)
+            self.setFixedSize(360, 190)
             self.timer = QTimer(self)
             self.timer.setInterval(500)
             self.timer.timeout.connect(self.refresh)
@@ -101,10 +104,15 @@ if QApplication is not None:
             task = _TelemetryTask(self.reader, self.session_id, self._telemetry_signals)
             self._telemetry_pool.start(task)
 
-        def _apply_snapshots(self, session_id, snapshots):
+        def _apply_snapshots(self, session_id, result):
             self._poll_in_flight = False
             if session_id != self.session_id:
                 return
+            if isinstance(result, tuple):
+                snapshots, quest = result
+                self.quest_label.setText(format_quest_summary(quest))
+            else:
+                snapshots = result
             for name, snapshot in snapshots.items():
                 self.rows[name].update_snapshot(snapshot)
 

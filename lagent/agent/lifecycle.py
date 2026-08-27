@@ -156,4 +156,22 @@ class SessionCapController:
         return True
 
 
-__all__ = ["DeathRecoveryController", "InventoryReturnController", "LifecycleSignal", "SessionCapController", "detect_lifecycle_signal"]
+class QuestRecoveryController:
+    """Apply existing lifecycle interruption semantics to verified quest checkpoints."""
+
+    def __init__(self, checkpoint_manager: Any) -> None:
+        self.checkpoint_manager = checkpoint_manager
+
+    def recover(self, interruption_reason: str, *, prior_runtime_state: str | None = None) -> Any:
+        del prior_runtime_state
+        return self.checkpoint_manager.restore(interruption_reason)
+
+
+__all__ = [
+    "DeathRecoveryController",
+    "InventoryReturnController",
+    "LifecycleSignal",
+    "QuestRecoveryController",
+    "SessionCapController",
+    "detect_lifecycle_signal",
+]

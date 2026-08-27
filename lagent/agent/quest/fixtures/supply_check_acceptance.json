@@ -1,0 +1,21 @@
+{
+  "character": {"class": "Orc Fighter", "level": 3, "area": "Kamael Village"},
+  "objectives": [
+    {
+      "sequence": 1,
+      "npc_fixture": "marcela",
+      "prompt_fixture": "interaction_prompt",
+      "dialogue_fixture": "dialogue",
+      "objective_text": "Speak to Marcela",
+      "completion_fixture": "objective"
+    },
+    {
+      "sequence": 2,
+      "npc_fixture": "marcela",
+      "prompt_fixture": "interaction_prompt",
+      "dialogue_fixture": "dialogue",
+      "objective_text": "Confirm supply",
+      "completion_fixture": "completion"
+    }
+  ]
+}

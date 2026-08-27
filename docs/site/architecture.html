@@ -58,6 +58,7 @@
         <tr><td>Warlord / Prophet Agent (<code>lagent.agent</code>)</td><td>Owns capture → inference-request → FSM/policy → HSL → OS input for one character window</td></tr>
         <tr><td>GPU Inference Server (<code>lagent.gpu_server</code>)</td><td>Sole owner of all YOLO + EasyOCR + CUDA calls; serves both agents over DEALER/ROUTER</td></tr>
         <tr><td>Party Orchestrator (<code>lagent.orchestrator</code>)</td><td>Relays Party Bus state between agents, monitors heartbeats, triggers session halt on health failure</td></tr>
+        <tr><td>Quest subsystem (<code>lagent.agent.quest</code>)</td><td>Agent-owned canonical resource validation, deterministic FSM, bounded navigation/dialogue, verified checkpoints, recovery, and shadow/live acceptance gating</td></tr>
         <tr><td>Training Pipeline (<code>lagent.train</code>, offline CLI)</td><td>Record → prelabel → train → atomic deploy; never runs concurrently with a live session</td></tr>
       </tbody>
     </table>
@@ -112,7 +113,27 @@ lagent.common  →  lagent.train      (types only)
 lagent.common  →  lagent.ui</code></pre>
     <p><code>lagent.common</code> holds every shared type: <code>GameState</code>,
       <code>PartyState</code>, <code>PerceptionResult</code>, <code>Action</code>,
-      <code>AgentProfile</code>. No module may add a reverse or cross edge to this graph.</p>
+      <code>AgentProfile</code>, and the canonical quest contracts. No module may add a reverse
+      or cross edge to this graph. Quest state remains inside the owning Agent; the UI only
+      projects ordered <code>agent.quest</code> events from <code>sessions.db</code>.</p>
+
+    <h2 id="quest-safety">Quest evidence and recovery boundary</h2>
+    <div class="pipeline">
+      <div class="step">Provider payload</div>
+      <span class="sep">→</span>
+      <div class="step">Canonical QuestResource</div>
+      <span class="sep">→</span>
+      <div class="step">Quest FSM</div>
+      <span class="sep">→</span>
+      <div class="step">Positive perception evidence</div>
+      <span class="sep">→</span>
+      <div class="step">Verified SQLite checkpoint</div>
+    </div>
+    <p>Raw provider data stops at the adapter boundary. Runtime quest components act only on the
+      canonical contract, and lifecycle recovery resumes only from a session-scoped verified
+      objective checkpoint. Missing, ambiguous, stale, or incomplete evidence routes the FSM to
+      bounded retry or safe stop. The exact resource and profile fingerprint must pass deterministic
+      shadow validation before <code>LiveQuestGate</code> allows a live attempt.</p>
 
     <h2 id="stack">Tech stack</h2>
     <table>

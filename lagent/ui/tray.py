@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Optional, Callable, List, Dict, Any
 from lagent.ui.state import UIState, SessionState, format_tooltip
+from lagent.ui.telemetry import QuestSnapshot, format_quest_summary
 
 logger = logging.getLogger(__name__)
 
@@ -179,7 +180,8 @@ class TrayIcon:
         self._stop_event = None
         self.state = UIState()
         self.icon_state = "idle"
-        self.tooltip = format_tooltip(self.state)
+        self._base_tooltip = format_tooltip(self.state)
+        self.tooltip = self._base_tooltip
         
         logger.debug(f"TrayIcon initialized with icon: {icon_path}")
     
@@ -330,7 +332,8 @@ class TrayIcon:
         """Update icon accessibility text and menu from the canonical state."""
         self.state = state
         self.menu.apply_state(state)
-        self.tooltip = format_tooltip(state, now)
+        self._base_tooltip = format_tooltip(state, now)
+        self.tooltip = self._base_tooltip
         self.icon_state = {
             SessionState.IDLE: "idle",
             SessionState.STARTING: "active",
@@ -343,6 +346,15 @@ class TrayIcon:
         if self._icon_instance is not None:
             self._icon_instance.title = self.tooltip
             self._refresh_pystray_menu()
+
+    def update_quest_status(self, snapshot: QuestSnapshot) -> str:
+        """Append the read-only quest projection to the tray tooltip."""
+
+        summary = format_quest_summary(snapshot)
+        self.tooltip = f"{self._base_tooltip} | {summary}" if summary else self._base_tooltip
+        if self._icon_instance is not None:
+            self._icon_instance.title = self.tooltip
+        return self.tooltip
     
     def _invoke_overlay_toggle(self) -> None:
         """Toggle overlay mode and refresh menu display."""

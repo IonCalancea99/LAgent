@@ -120,6 +120,10 @@ UX-6: Ion-only operator model — no login, no user management, no settings wiza
 | FR-22 | Epic 7 — YouTube ingestion |
 | FR-24 | Epic 3 — Shadow Mode (inside HSL) |
 | FR-25 | Epic 4 — Fishing cast-and-reel loop |
+| FR-26 | Epic 9 — Quest resource discovery from `lineage.ru` |
+| FR-27 | Epic 9 — Supply Check conversational execution |
+| FR-28 | Epic 9 — Quest perception and completion verification |
+| FR-29 | Epic 9 — Quest failure and lifecycle recovery |
 | UX-1–6 | Epic 8 — Tray UI + overlay |
 
 ---
@@ -157,6 +161,22 @@ Ion can record a gameplay session, run auto-prelabeling, correct labels in Label
 ### Epic 8: Tray UI & Status Overlay
 Ion can control sessions entirely from the system tray: start/stop sessions with profile selection, toggle Recording Mode, and monitor per-agent FSM state + HP/MP + session timer in a minimal always-on-top overlay.
 **UX covered:** UX-1, UX-2, UX-3, UX-4, UX-5, UX-6
+
+### Epic 9: Quest Mode (V1, Phase 1 Supply Check)
+Ion can run the simple conversational Supply Check quest beginning with NPC Marcela in Kamael village using a level-3 Orc Fighter. The Agent scrapes and validates quest metadata from `lineage.ru`, discovers the objective and dialogue sequence, navigates and interacts using verified perception, logs progress, and stops safely on ambiguity. Phase 1 is single-agent and requires no combat.
+**FRs covered:** FR-26, FR-27, FR-28, FR-29
+**Dependencies:** Epics 1–3, Story 4.1 agent loop, Story 4.2 character identification, Epic 6 lifecycle recovery, and Epic 8 operational status.
+
+#### Epic 9 Stories
+
+- **Story 9.1:** Lineage resource adapter and validated quest state/profile contract
+- **Story 9.2:** Supply Check perception fixtures for Marcela, dialogue, objectives, and completion
+- **Story 9.3:** Deterministic Quest FSM and positive objective verification
+- **Story 9.4:** Resource-driven Kamael village navigation and stuck detection
+- **Story 9.5:** Marcela interaction and dialogue selection with bounded retries
+- **Story 9.6:** Quest checkpoint, failure, and lifecycle recovery
+- **Story 9.7:** Quest telemetry and tray/overlay status
+- **Story 9.8:** Shadow-mode and live Supply Check acceptance fixture
 
 ---
 

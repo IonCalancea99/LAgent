@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Quest Mode · LAgent Docs</title>
+<link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+<header class="topbar">
+  <button id="navToggle" aria-label="Toggle navigation">☰</button>
+  <div class="brand">🤖 LAgent Docs</div>
+  <div class="search-wrap">
+    <input id="searchInput" type="text" placeholder="Search docs…" autocomplete="off" />
+    <div id="searchResults" class="search-results"></div>
+  </div>
+  <button id="themeToggle" aria-label="Toggle theme">🌓</button>
+</header>
+
+<div class="layout">
+  <nav id="sidebar" class="sidebar"></nav>
+
+  <main class="content">
+    <h1>Quest Mode</h1>
+    <p>
+      <span class="badge">Epic 9</span>
+      <span class="badge">Supply Check V1</span>
+      <span class="badge">Single agent</span>
+      <span class="badge">No combat</span>
+    </p>
+    <p>Quest Mode provides a bounded, evidence-driven implementation of the Supply Check quest
+      that begins with Marcela in Kamael Village. The V1 acceptance fixture targets a level-3
+      Orc Fighter and exercises resource validation, navigation, dialogue, completion evidence,
+      checkpoints, recovery, and operator telemetry.</p>
+
+    <div class="callout warn">
+      <strong class="callout-title">Current integration boundary</strong>
+      Epic 9 ships the quest engine, deterministic replay harness, live gate, persistence, and
+      UI status projection. Quest Mode is not yet a selectable tray profile or an
+      <code>lagent-agent</code> CLI class. Use the focused acceptance test below to validate the
+      implemented flow; do not infer a production launch command from this page.
+    </div>
+
+    <h2 id="flow">Supply Check flow</h2>
+    <div class="pipeline">
+      <div class="step">Validate canonical quest resource</div>
+      <span class="sep">→</span>
+      <div class="step">Navigate to Marcela</div>
+      <span class="sep">→</span>
+      <div class="step">Speak to Marcela</div>
+      <span class="sep">→</span>
+      <div class="step">Confirm supply</div>
+      <span class="sep">→</span>
+      <div class="step">Verify completion evidence</div>
+      <span class="sep">→</span>
+      <div class="step">Complete or safe stop</div>
+    </div>
+    <p>The objective order is fixed. Each step requires fresh, positive perception evidence;
+      elapsed time, stale snapshots, and default FSM state cannot prove progress or completion.</p>
+
+    <h2 id="validate">Validate the shadow replay</h2>
+    <p>From the repository root, run the complete Epic 9 acceptance slice:</p>
+    <pre><code>.venv/bin/python -m pytest tests/test_story_9_8_quest_acceptance.py -q</code></pre>
+    <p>A passing replay confirms that the fixture completes both objectives without emitting OS
+      mouse or keyboard input, writes a reviewable event trace, and reaches terminal state
+      <code>complete</code> with explicit completion evidence.</p>
+    <div class="callout info">
+      <strong class="callout-title">What shadow validation authorizes</strong>
+      <code>LiveQuestGate</code> allows a live attempt only when the passing replay fingerprint
+      matches the exact canonical resource and profile ID. A changed profile, retry policy, route,
+      dialogue contract, or failed replay closes the gate.
+    </div>
+
+    <h2 id="contract">Canonical quest contract</h2>
+    <p>Runtime components consume a validated <code>QuestResource</code>, not raw provider data.
+      The adapter rejects missing, malformed, unknown, or unsupported values before any action
+      can be emitted.</p>
+    <table>
+      <thead><tr><th>Field</th><th>Supply Check V1 value or purpose</th></tr></thead>
+      <tbody>
+        <tr><td><code>quest_id</code></td><td><code>marcela_supply_check</code></td></tr>
+        <tr><td><code>starting_npc</code></td><td><code>Marcela</code></td></tr>
+        <tr><td><code>objective_sequence</code></td><td><code>talk_marcela</code>, then <code>confirm_supply</code></td></tr>
+        <tr><td><code>navigation_route</code></td><td><code>marcela_platform</code></td></tr>
+        <tr><td><code>timeouts</code></td><td>Bounded travel and dialogue windows</td></tr>
+        <tr><td><code>retries</code></td><td>Bounded travel, dialogue, and default retry counts</td></tr>
+        <tr><td><code>safe_stop_conditions</code></td><td><code>npc_not_found</code>, <code>route_stuck</code>, <code>ambiguous_dialogue</code></td></tr>
+        <tr><td><code>completion_indicators</code></td><td>Explicit <code>quest_complete</code> evidence</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="safety">Fail-closed behavior</h2>
+    <table>
+      <thead><tr><th>Condition</th><th>Result</th></tr></thead>
+      <tbody>
+        <tr><td>NPC, prompt, or dialogue is missing or ambiguous</td><td>Retry within the contract limit, then safe stop; never guess</td></tr>
+        <tr><td>Route progress stalls</td><td>Bounded recovery attempts, then <code>route_stuck</code></td></tr>
+        <tr><td>Evidence sequence is stale or duplicated</td><td>Reject it as <code>stale_evidence</code></td></tr>
+        <tr><td>Explicit completion evidence is missing</td><td>Fail with <code>completion_verify_failed</code></td></tr>
+        <tr><td>Resource or profile changes after replay</td><td>Block live acceptance with <code>shadow_contract_mismatch</code></td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="recovery">Checkpoints and recovery</h2>
+    <p>Quest progress is persisted to the existing WAL-mode <code>data/sessions.db</code> only
+      after an objective has positive verification. Each checkpoint records the objective index,
+      status, verification source, evidence, and session identity before the next objective begins.</p>
+    <ul>
+      <li>A restart may resume from the latest valid, verified checkpoint.</li>
+      <li>An interruption before a checkpoint is ambiguous and requires a safe stop or operator intervention.</li>
+      <li>Death and disconnect recovery use the same lifecycle rules; they do not bypass evidence checks.</li>
+      <li>Failures record the objective index, retry count, reason, and last verified evidence.</li>
+    </ul>
+
+    <h2 id="monitor">Monitor quest status</h2>
+    <p>The existing tray tooltip and status overlay read quest events from the sessions database.
+      During an integrated quest session, they project quest name, current objective, progress,
+      and status without owning or changing quest decisions.</p>
+    <pre><code>Supply Check · Speak to Marcela · 1/2 · Running
+Supply Check · Confirm supply · 2/2 · Complete
+Supply Check · Speak to Marcela · 1/2 · Failed · NPC not found</code></pre>
+    <p>Possible states are <code>running</code>, <code>paused</code>, <code>complete</code>, and
+      <code>failed</code>. New sessions and no-quest sessions clear old quest text; stale events
+      from another session cannot replace the current projection.</p>
+
+    <h2 id="scope">V1 scope</h2>
+    <div class="cards">
+      <div class="card"><h3>Included</h3><p>Marcela, Supply Check, level-3 Orc Fighter, Kamael Village, two conversational objectives, deterministic shadow replay.</p></div>
+      <div class="card"><h3>Not included</h3><p>Combat, multiple simultaneous agents, arbitrary quests, open-ended navigation, or unattended recovery from ambiguous state.</p></div>
+    </div>
+
+    <div class="page-nav"></div>
+  </main>
+
+  <aside id="toc" class="toc"></aside>
+</div>
+
+<script src="assets/search-index.js"></script>
+<script src="assets/app.js" data-page="quest-mode"></script>
+</body>
+</html>
