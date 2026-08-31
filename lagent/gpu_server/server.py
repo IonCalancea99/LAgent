@@ -206,6 +206,8 @@ class GpuInferenceServer:
         endpoint: str = GPU_ENDPOINT,
         context=None,
         inference: YoloInference | None = None,
+        session_id: str | None = None,
+        db: Any | None = None,
     ):
         import zmq
 
@@ -215,6 +217,8 @@ class GpuInferenceServer:
         self.socket = self.context.socket(zmq.ROUTER)
         self.socket.bind(endpoint)
         self.inference = inference or YoloInference(ocr=OcrInference())
+        self.session_id = session_id
+        self.db = db
         self._stopped = threading.Event()
 
     def serve(self, once: bool = False) -> None:
@@ -237,6 +241,21 @@ class GpuInferenceServer:
                     )
                     latency_ms = (time.perf_counter() - started) * 1000
                     logger.info("YOLO inference agent=%s latency_ms=%.2f", agent_id, latency_ms)
+                    if self.db is not None and self.session_id is not None:
+                        try:
+                            self.db.append_event(
+                                self.session_id,
+                                "gpu_server",
+                                "inference",
+                                {
+                                    "agent_id": agent_id,
+                                    "latency_ms": latency_ms,
+                                    "detection_count": len(result.detections),
+                                    "ocr_value_count": len(result.ocr_values),
+                                },
+                            )
+                        except Exception:
+                            logger.exception("GPU inference telemetry failed for session %s", self.session_id)
                     self.socket.send_multipart([identity, encode({
                         "agent_id": agent_id,
                         "result": result.model_dump(mode="json"),

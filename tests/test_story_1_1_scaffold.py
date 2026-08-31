@@ -314,18 +314,18 @@ class TestEntryPoints:
     """AC-2: Entry points start and exit immediately with code 0."""
     
     def test_agent_entry_point(self):
-        """python -m lagent.agent exits with code 0."""
+        """python -m lagent.agent --check exits with code 0."""
         result = subprocess.run(
-            [sys.executable, "-m", "lagent.agent"],
+            [sys.executable, "-m", "lagent.agent", "--check"],
             cwd=Path(__file__).parent.parent,
             capture_output=True
         )
         assert result.returncode == 0, f"Agent failed: {result.stderr.decode()}"
     
     def test_gpu_server_entry_point(self):
-        """python -m lagent.gpu_server exits with code 0."""
+        """python -m lagent.gpu_server --check exits with code 0."""
         result = subprocess.run(
-            [sys.executable, "-m", "lagent.gpu_server"],
+            [sys.executable, "-m", "lagent.gpu_server", "--check"],
             cwd=Path(__file__).parent.parent,
             capture_output=True
         )

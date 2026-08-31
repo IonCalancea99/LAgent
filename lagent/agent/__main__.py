@@ -2,18 +2,22 @@
 
 import argparse
 import logging
+import re
 import sys
 import uuid
 from pathlib import Path
+from typing import Any
 
-from lagent.common import Action, PerceptionResult
+from lagent.common import GameState, PerceptionResult
 from lagent.agent.capture import CaptureThread
 from lagent.agent.inference import InferenceClient, PolicyQueue
 from lagent.agent.loop import AgentLoop
 from lagent.agent.recording import PynputInputListener, RecordingSession
 from lagent.agent.fishing_fsm import FishingFSM
 from lagent.agent.party_bus import PartyBus
+from lagent.agent.prophet import ProphetBuffCycleFSM
 from lagent.agent.startup import StartupProfileResolver, scan_window
+from lagent.agent.warlord import WarlordCombatFSM
 from lagent.common.transport import GPU_ENDPOINT
 from lagent.common.transport import (
     ORCHESTRATOR_CONTROL_ENDPOINT,
@@ -22,6 +26,54 @@ from lagent.common.transport import (
 )
 from lagent.common.sessions_db import SessionsDB
 from lagent.hsl import HSL
+
+
+def _ocr_percent(value: str | None, default: float = 100.0) -> float:
+    match = re.search(r"\d+(?:\.\d+)?", value or "")
+    return min(100.0, max(0.0, float(match.group()))) if match else default
+
+
+def _game_state_from_perception(result: PerceptionResult, party_bus: Any) -> GameState:
+    peer_state = None if party_bus.is_peer_state_stale() else party_bus.peer_party_state
+    mob_positions = {}
+    character_position = (0, 0)
+    loot_presence = False
+    for index, detection in enumerate(result.detections):
+        x1, y1, x2, y2 = detection.bbox_xyxy
+        center = (int((x1 + x2) / 2), int((y1 + y2) / 2))
+        name = detection.class_name.lower()
+        if name in {"mob", "enemy", "monster"}:
+            mob_positions[f"{name}-{index}"] = center
+        elif name in {"character", "player", "self"}:
+            character_position = center
+        elif name == "loot":
+            loot_presence = True
+    return GameState(
+        hp_percent=_ocr_percent(result.ocr_values.get("hp")),
+        mp_percent=_ocr_percent(result.ocr_values.get("mp")),
+        active_buffs=[],
+        mob_positions=mob_positions,
+        loot_presence=loot_presence,
+        character_position=character_position,
+        ui_mode="combat",
+        peer_party_state=peer_state,
+    )
+
+
+def build_state_handler(selected_class: str, *, profile: Any, session_id: str, db: Any, party_bus: Any) -> Any:
+    if selected_class == "fishing":
+        return FishingFSM(profile=profile, session_id=session_id, db=db)
+    if selected_class == "warlord":
+        return WarlordCombatFSM(profile=profile, session_id=session_id, db=db, party_bus=party_bus)
+    if selected_class == "prophet":
+        return ProphetBuffCycleFSM(
+            profile=profile,
+            game_state_provider=lambda result: _game_state_from_perception(result, party_bus),
+            session_id=session_id,
+            db=db,
+            party_bus=party_bus,
+        )
+    raise ValueError(f"unsupported agent class: {selected_class}")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -40,6 +92,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--window-title", default="Lineage II", help="Game window title to capture")
     parser.add_argument("--gpu-endpoint", default=GPU_ENDPOINT, help="GPU inference server endpoint")
     parser.add_argument("--fps", type=int, default=10, help="Capture and inference rate")
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="Resolve the profile, record session start, then exit without running the control loop",
+    )
     return parser
 
 
@@ -80,26 +137,29 @@ def main() -> None:
         # Generate or use provided session ID
         session_id = args.session_id or f"agent-{args.profile_class or 'auto'}-{uuid.uuid4().hex[:8]}"
 
+        # Session row must exist before any event is appended (events.session_id is a foreign key).
+        db.log_session_start(
+            session_id=session_id,
+            profile=args.profile_class or "pending",
+            mode=session_mode,
+        )
+        logger.info("Session started: %s", session_id)
+
         resolver = StartupProfileResolver()
         assignment = resolver.resolve(
             override=args.profile_class,
             scan=startup_scan,
             confirm=confirm_profile,
             session_id=session_id,
-            db=None if args.record else db,
+            db=db,
         )
         profile = assignment.profile
         selected_class = assignment.profile_class
         logger.info("Profile loaded: %s", profile.name)
-        
-        # Log session start
-        db.log_session_start(
-            session_id=session_id,
-            profile=selected_class,
-            mode=session_mode
-        )
-        logger.info("Session started: %s", session_id)
-        
+
+        if selected_class != args.profile_class:
+            db.update_session_profile(session_id, selected_class)
+
         # Log startup event
         db.append_event(
             session_id=session_id,
@@ -112,21 +172,8 @@ def main() -> None:
                 "mode": session_mode,
             }
         )
-        if assignment.identification is not None:
-            db.append_event(
-                session_id,
-                "agent",
-                "character_identification",
-                {
-                    "detected_profile": assignment.identification.profile_class,
-                    "confidence": assignment.identification.confidence,
-                    "threshold": assignment.identification.threshold,
-                    "chosen_profile": selected_class,
-                    "fallback": "manual" if assignment.manual_fallback else "automatic",
-                },
-            )
-        
-        if args.record or args.debug or sys.stdin.isatty():
+
+        if not args.check:
             party_endpoints = {
                 "warlord": WARLORD_PARTY_ENDPOINT,
                 "prophet": PROPHET_PARTY_ENDPOINT,
@@ -162,11 +209,13 @@ def main() -> None:
                 profile=profile,
                 debug=True,
             )
-            fishing_fsm = FishingFSM(
+            state_handler = build_state_handler(
+                selected_class,
                 profile=profile,
                 session_id=session_id,
                 db=db,
-            ) if selected_class == "fishing" else None
+                party_bus=party_bus,
+            )
             hsl = HSL(
                 profile=profile,
                 mode="shadow" if args.shadow or args.record else "active",
@@ -176,7 +225,7 @@ def main() -> None:
             loop = AgentLoop(
                 frame_queue=capture.frame_queue,
                 policy_queue=policy_queue,
-                state_handler=fishing_fsm or (lambda result, state: Action(action_type="wait", duration=0.0)),
+                state_handler=state_handler,
                 hsl=hsl,
                 profile=profile,
                 session_id=session_id,
@@ -201,7 +250,7 @@ def main() -> None:
             db.close()
         
     except Exception as e:
-        logger.error("Failed to initialize sessions database: %s", e)
+        logger.error("Agent startup failed: %s", e)
         raise
 
 

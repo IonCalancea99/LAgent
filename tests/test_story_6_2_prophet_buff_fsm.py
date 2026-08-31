@@ -4,8 +4,12 @@ import math
 import time
 from unittest.mock import Mock
 
+import pytest
+
+import lagent.agent.__main__ as agent_main
 from lagent.common import Action, GameState, PartyState, PerceptionResult
 from lagent.agent.prophet import BuffTimer, ProphetBuffPolicy, PPBuffSafetyCheck
+from lagent.agent.warlord import WarlordCombatFSM
 
 
 def fake_profile(
@@ -60,6 +64,69 @@ class FakeSessionDB:
 
     def append_event(self, session_id, source, event_type, payload):
         self.events.append((session_id, source, event_type, payload))
+
+
+class FakePartyBus:
+    def __init__(self, peer_party_state=None):
+        self.peer_party_state = peer_party_state
+
+    def is_peer_state_stale(self):
+        return self.peer_party_state is None
+
+    def publish_state(self, _state):
+        return None
+
+
+@pytest.mark.parametrize(
+    ("profile_class", "expected_type"),
+    (("fishing", agent_main.FishingFSM), ("warlord", WarlordCombatFSM), ("prophet", ProphetBuffPolicy)),
+)
+def test_startup_selects_class_state_handler(profile_class, expected_type):
+    handler = agent_main.build_state_handler(
+        profile_class,
+        profile=fake_profile(),
+        session_id="session-6",
+        db=FakeSessionDB(),
+        party_bus=FakePartyBus(),
+    )
+    assert isinstance(handler, expected_type)
+
+
+def test_startup_rejects_unknown_class():
+    with pytest.raises(ValueError, match="unsupported agent class"):
+        agent_main.build_state_handler(
+            "unknown",
+            profile=fake_profile(),
+            session_id="session-6",
+            db=FakeSessionDB(),
+            party_bus=FakePartyBus(),
+        )
+
+
+def test_prophet_startup_projects_fresh_peer_state_for_safety():
+    peer_state = fake_game_state(peer_fsm_state="PULLING").peer_party_state
+    handler = agent_main.build_state_handler(
+        "prophet",
+        profile=fake_profile(),
+        session_id="session-6",
+        db=FakeSessionDB(),
+        party_bus=FakePartyBus(peer_state),
+    )
+    state = handler.game_state_provider(PerceptionResult(ocr_values={"hp": "87%", "mp": "42%"}))
+    assert state.hp_percent == 87.0
+    assert state.mp_percent == 42.0
+    assert state.peer_party_state is peer_state
+
+
+def test_prophet_stops_when_warlord_session_is_stopped():
+    policy = ProphetBuffPolicy(
+        profile=fake_profile(),
+        game_state_provider=lambda _: fake_game_state(peer_fsm_state="STOPPED"),
+    )
+
+    assert policy(fake_perception(), "IDLE") is None
+    assert policy.next_state == "STOPPED"
+    assert policy.state == "STOPPED"
 
 
 def test_buff_timer_expires_at_configured_duration():

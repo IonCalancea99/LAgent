@@ -83,8 +83,22 @@
       eviction with a max depth of 2 frames per stage — a slow GPU tick never blocks the
       capture thread.</p>
 
+    <h2 id="endpoints">ZeroMQ endpoint map</h2>
+    <table>
+      <thead><tr><th>Endpoint</th><th>Socket pattern</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td><code>tcp://127.0.0.1:5555</code></td><td>Agent DEALER → GPU ROUTER</td><td>Frame/ROI requests and correlated <code>PerceptionResult</code> responses</td></tr>
+        <tr><td><code>tcp://127.0.0.1:5556</code></td><td>Warlord PUB → subscribers</td><td>Warlord <code>PartyState</code> and heartbeat messages</td></tr>
+        <tr><td><code>tcp://127.0.0.1:5557</code></td><td>Prophet PUB → subscribers</td><td>Prophet <code>PartyState</code> and heartbeat messages</td></tr>
+        <tr><td><code>tcp://127.0.0.1:5558</code></td><td>Orchestrator PUB → Agent SUB</td><td>Session halt and operator-authorized resume control</td></tr>
+      </tbody>
+    </table>
+    <p>The constants in <code>lagent/common/transport.py</code> are the source of truth. All
+      endpoints bind to loopback and are not exposed as remote services.</p>
+
     <h2 id="invariants">Key architectural invariants</h2>
-    <p>Condensed from the project's Architecture Spine (<code>AD-1</code>…<code>AD-13</code>):</p>
+    <p>Condensed from the project's Architecture Spine. Use the
+      <a href="../architecture-decisions.md">linkable AD-1…AD-13 index</a> for reviews and issue references.</p>
     <table>
       <thead><tr><th>ID</th><th>Rule</th></tr></thead>
       <tbody>

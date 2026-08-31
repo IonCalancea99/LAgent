@@ -6,6 +6,7 @@ const NAV_ITEMS = [
   { id: "installation", href: "installation.html", label: "Installation", icon: "\u2699\ufe0f" },
   { id: "preparation", href: "preparation.html", label: "Preparation & Config", icon: "\ud83e\udde9" },
   { id: "running", href: "running.html", label: "Running LAgent", icon: "\u25b6\ufe0f" },
+  { id: "combat-mode", href: "combat-mode.html", label: "Combat Mode", icon: "\u2694\ufe0f" },
   { id: "quest-mode", href: "quest-mode.html", label: "Quest Mode", icon: "\ud83d\udcdc" },
   { id: "class-flows", href: "class-flows.html", label: "Class Leveling Flows", icon: "\ud83e\udded" },
   { id: "training", href: "training.html", label: "Training Pipeline", icon: "\ud83c\udf93" },

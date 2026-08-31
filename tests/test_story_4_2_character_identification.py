@@ -122,13 +122,16 @@ def test_main_passes_session_context_to_profile_resolver(monkeypatch):
         def log_session_start(self, **_kwargs):
             return None
 
+        def update_session_profile(self, *_args, **_kwargs):
+            return None
+
         def append_event(self, *args, **kwargs):
             self.events.append((args, kwargs))
 
         def close(self):
             return None
 
-    monkeypatch.setattr("sys.argv", ["lagent", "--window-title", "Test Window", "--gpu-endpoint", "http://example"])
+    monkeypatch.setattr("sys.argv", ["lagent", "--window-title", "Test Window", "--gpu-endpoint", "http://example", "--check"])
     monkeypatch.setattr(agent_main, "SessionsDB", FakeDB)
 
     def fake_resolve(self, **kwargs):

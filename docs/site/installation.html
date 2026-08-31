@@ -60,6 +60,14 @@ python --version  # should report 3.12.x</code></pre>
     <p>For development (tests, linting, formatting), install the optional <code>dev</code> extras:</p>
     <pre><code>python -m pip install -e ".[dev]"</code></pre>
     <p>This pulls in <code>pytest</code>, <code>pytest-cov</code>, <code>black</code>, and <code>ruff</code> in addition to the runtime dependencies declared in <code>pyproject.toml</code> (Pydantic, PyYAML, PyZMQ, structlog, Ultralytics YOLO, MLflow, Pillow, yt-dlp, OpenCV, EasyOCR, dxcam, mss, pynput, pystray, PyQt6).</p>
+    <div class="callout warn">
+      <strong class="callout-title">Use Python 3.12, not a newer interpreter</strong>
+      The editable development install skips <code>dxcam</code> and <code>pywin32</code>
+      correctly on macOS. An existing Python 3.14 environment still fails because the pinned
+      PyZMQ and MLflow/PyArrow ranges do not provide compatible wheels and their source builds
+      fail. If <code>python --version</code> is not 3.12.x, recreate <code>.venv</code> with
+      <code>python3.12</code> before installing.
+    </div>
 
     <h2 id="platform-deps">3. Platform-specific dependencies</h2>
     <p>A few dependencies are intentionally platform-restricted. This is expected behavior, not a broken install:</p>
@@ -74,8 +82,8 @@ python --version  # should report 3.12.x</code></pre>
     </table>
     <div class="callout info">
       <strong class="callout-title">Working on macOS/Linux</strong>
-      You can install and run everything except the Windows-only pieces, and the full test
-      suite runs on the cross-platform subset (this mirrors what the project's
+      With Python 3.12, you can install and run everything except the Windows-only pieces, and
+      the full test suite runs on the cross-platform subset (this mirrors what the project's
       <code>Dockerfile</code> does — see below). Live capture and simulated input against the
       real game client require Windows.
     </div>

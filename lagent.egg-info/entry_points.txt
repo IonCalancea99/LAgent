@@ -1,5 +1,0 @@
-[console_scripts]
-lagent-agent = lagent.agent:main
-lagent-gpu-server = lagent.gpu_server:main
-lagent-orchestrator = lagent.orchestrator:main
-lagent-ui = lagent.ui:main

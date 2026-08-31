@@ -268,6 +268,24 @@ class SessionsDB:
             logger.error(f"Failed to log session end: {e}")
             raise
 
+    def update_session_profile(self, session_id: str, profile: str) -> None:
+        """Set the resolved profile on an existing session row."""
+        try:
+            self.conn.execute(
+                """
+                UPDATE sessions
+                SET profile = ?
+                WHERE session_id = ?
+                """,
+                (profile, session_id)
+            )
+            self.conn.commit()
+            logger.debug(f"Session profile updated: {session_id} -> {profile}")
+
+        except sqlite3.OperationalError as e:
+            logger.error(f"Failed to update session profile: {e}")
+            raise
+
     def get_events_by_type(
         self,
         session_id: str,

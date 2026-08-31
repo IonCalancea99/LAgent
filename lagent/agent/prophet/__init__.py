@@ -198,6 +198,16 @@ class ProphetBuffPolicy:
             self._retry_at = None
             return None
 
+        game_state = self.game_state_provider(perception) if self.game_state_provider else None
+        peer_state = getattr(game_state, "peer_party_state", None)
+        if peer_state is not None and peer_state.fsm_state == "STOPPED":
+            self.state = "STOPPED"
+            self.next_state = "STOPPED"
+            self._pending_buff = None
+            self._retry_at = None
+            self._log_event("peer_session_stopped", {"peer_state": peer_state.fsm_state})
+            return None
+
         now = self.clock()
 
         # Re-evaluate pending buff if retry time has passed
@@ -227,7 +237,6 @@ class ProphetBuffPolicy:
 
         # Attempt to cast pending buff after safety check
         buff_name = self._pending_buff
-        game_state = self.game_state_provider(perception) if self.game_state_provider else None
         outcome = self.safety_check.evaluate(
             game_state or GameState(
                 hp_percent=100.0,

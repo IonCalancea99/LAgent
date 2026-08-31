@@ -54,7 +54,7 @@
     </div>
     <p>Each process can also be started standalone for debugging:</p>
     <pre><code># GPU Inference Server — owns all YOLO/EasyOCR/CUDA calls
-python -m lagent.gpu_server
+python -m lagent.gpu_server [--session-id SESSION_ID]
 
 # Party Orchestrator — relays party state, monitors heartbeats
 python -m lagent.orchestrator [--session-id SESSION_ID]
@@ -68,6 +68,23 @@ lagent-orchestrator
 lagent-agent
 lagent-ui</code></pre>
 
+    <h2 id="tray-child-contract">Tray-to-child CLI contract</h2>
+    <p>The tray builds these argument vectors. All children in one process group receive the same
+      session ID; only Agent children receive Recording or Shadow Mode flags.</p>
+    <table>
+      <thead><tr><th>Child</th><th>Arguments passed by the tray</th></tr></thead>
+      <tbody>
+        <tr><td>GPU server</td><td><code>python -m lagent.gpu_server --session-id &lt;id&gt;</code></td></tr>
+        <tr><td>Orchestrator</td><td><code>python -m lagent.orchestrator --session-id &lt;id&gt;</code></td></tr>
+        <tr><td>Fishing Agent</td><td><code>python -m lagent.agent --class fishing --session-id &lt;id&gt; --window-title "Lineage II"</code></td></tr>
+        <tr><td>Warlord Agent</td><td><code>python -m lagent.agent --class warlord --session-id &lt;id&gt; --window-title "Lineage II"</code></td></tr>
+        <tr><td>Prophet Agent</td><td><code>python -m lagent.agent --class prophet --session-id &lt;id&gt; --window-title "Lineage II - 2"</code></td></tr>
+      </tbody>
+    </table>
+    <p>Recording appends <code>--record</code> to each Agent command. The Shadow profile appends
+      <code>--shadow</code>. The flags are mutually exclusive. Agent and GPU server module entry
+      points accept <code>--check</code> for smoke validation; the tray never adds it to a live child.</p>
+
     <h2 id="agent-cli">Agent CLI options</h2>
     <table>
       <thead><tr><th>Flag</th><th>Default</th><th>Description</th></tr></thead>
@@ -80,6 +97,7 @@ lagent-ui</code></pre>
         <tr><td><code>--window-title</code></td><td><code>Lineage II</code></td><td>Title of the game window to capture</td></tr>
         <tr><td><code>--gpu-endpoint</code></td><td>project default endpoint</td><td>ZeroMQ endpoint of the GPU Inference Server</td></tr>
         <tr><td><code>--fps</code></td><td><code>10</code></td><td>Capture and inference rate</td></tr>
+        <tr><td><code>--check</code></td><td>off</td><td>Initialize and exit without entering the control loop; intended for smoke tests</td></tr>
       </tbody>
     </table>
     <p>If startup character identification is inconclusive, the agent prompts on the console for
@@ -112,6 +130,9 @@ lagent-ui</code></pre>
       <a href="quest-mode.html#validate">shadow replay validation</a> instead of attempting to
       launch it from the commands above.
     </div>
+
+    <p>See <a href="combat-mode.html">Combat Mode</a> for the Warlord and Prophet FSMs, safety
+      gate, and lifecycle interruption behavior selected by these commands.</p>
 
     <h2 id="stopping">Stopping a session</h2>
     <p>A session ends in one of three ways:</p>

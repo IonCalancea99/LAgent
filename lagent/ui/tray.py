@@ -66,11 +66,11 @@ class SessionStartItem:
 class MenuItem:
     """Generic menu item with label and callback."""
     
-    def __init__(self, label: str, callback: Optional[Callable] = None):
+    def __init__(self, label: str, callback: Optional[Callable] = None, enabled: bool = True):
         """Initialize menu item."""
         self.label = label
         self.callback = callback
-        self.enabled = True
+        self.enabled = enabled
     
     def invoke(self) -> None:
         """Invoke the callback if set and enabled."""
@@ -89,9 +89,9 @@ class Menu:
         
         # Menu items
         self.start_session = SessionStartItem()
-        self.stop_session = MenuItem("Stop Session")
-        self.recording_mode_toggle = MenuItem("Recording Mode: OFF")
-        self.status_overlay_toggle = MenuItem("Status Overlay: OFF")
+        self.stop_session = MenuItem("Stop Session", enabled=False)
+        self.recording_mode_toggle = MenuItem("Recording Mode: OFF", enabled=False)
+        self.status_overlay_toggle = MenuItem("Status Overlay: OFF", enabled=False)
         self.exit = MenuItem("Exit")
         
         # Track session state
@@ -126,6 +126,8 @@ class Menu:
         
         # Now Stop is enabled
         self.stop_session.enabled = True
+        self.recording_mode_toggle.enabled = True
+        self.status_overlay_toggle.enabled = True
         
         logger.debug("Menu: processes registered, Stop enabled")
     
@@ -137,6 +139,8 @@ class Menu:
         # Re-enable Start, disable Stop
         self.start_session.enabled = True
         self.stop_session.enabled = False
+        self.recording_mode_toggle.enabled = False
+        self.status_overlay_toggle.enabled = False
         
         logger.debug("Menu: session stopped, Start enabled, Stop disabled")
     
@@ -159,6 +163,8 @@ class Menu:
         active = state.status in {SessionState.STARTING, SessionState.RUNNING, SessionState.RECORDING, SessionState.STOPPING}
         self.start_session.enabled = not active and state.status != SessionState.UNKNOWN
         self.stop_session.enabled = active and state.status != SessionState.STARTING
+        self.recording_mode_toggle.enabled = self.stop_session.enabled
+        self.status_overlay_toggle.enabled = self.stop_session.enabled
         self.state.recording_mode_active = state.recording
         status = "ON" if state.recording else "OFF"
         self.recording_mode_toggle.label = f"Recording Mode: {status}"

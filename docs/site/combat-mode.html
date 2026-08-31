@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Combat Mode · LAgent Docs</title>
+<link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+<header class="topbar">
+  <button id="navToggle" aria-label="Toggle navigation">☰</button>
+  <div class="brand">🤖 LAgent Docs</div>
+  <div class="search-wrap">
+    <input id="searchInput" type="text" placeholder="Search docs…" autocomplete="off" />
+    <div id="searchResults" class="search-results"></div>
+  </div>
+  <button id="themeToggle" aria-label="Toggle theme">🌓</button>
+</header>
+
+<div class="layout">
+  <nav id="sidebar" class="sidebar"></nav>
+  <main class="content">
+    <h1>Combat Mode</h1>
+    <p><span class="badge">Epic 6</span> <span class="badge">Warlord + Prophet</span></p>
+    <p>Combat Mode launches one Agent per game window. Startup selects the concrete FSM from
+      <code>--class</code>; an unknown class fails instead of falling back to an idle policy.</p>
+
+    <h2 id="warlord-fsm">Warlord combat FSM</h2>
+    <div class="pipeline">
+      <div class="step">IDLE</div><span class="sep">→</span>
+      <div class="step">PULLING</div><span class="sep">→</span>
+      <div class="step">FIGHTING</div><span class="sep">→</span>
+      <div class="step">LOOTING</div><span class="sep">→</span>
+      <div class="step">IDLE</div>
+    </div>
+    <p>Mob evidence starts a pull, center-frame proximity starts the AoE rotation, and a clear
+      mob area opens the bounded loot window. Every action passes through HSL and each transition
+      is appended to the shared session database.</p>
+
+    <h2 id="prophet-fsm">Prophet buff FSM</h2>
+    <div class="pipeline">
+      <div class="step">IDLE + independent timers</div><span class="sep">→</span>
+      <div class="step">BUFFING</div><span class="sep">→</span>
+      <div class="step">Safety Check</div><span class="sep">→</span>
+      <div class="step">Cast or bounded retry</div>
+    </div>
+    <p>The Prophet projects current HP/MP OCR, detections, and the latest fresh Warlord
+      <code>PartyState</code> into its local <code>GameState</code>. A nearby mob or Warlord
+      <code>PULLING</code> state defers the cast without dropping the pending buff.</p>
+
+    <h2 id="lifecycle">Lifecycle interruptions</h2>
+    <table>
+      <thead><tr><th>Signal</th><th>State</th><th>Behavior</th></tr></thead>
+      <tbody>
+        <tr><td>Death evidence</td><td><code>DEAD</code></td><td>Suppress combat, execute configured recovery actions, then resume the prior state.</td></tr>
+        <tr><td>Inventory full</td><td><code>RETURNING</code></td><td>Suspend combat, execute configured return and loot disposition rules, then resume from IDLE.</td></tr>
+        <tr><td>Session halt</td><td><code>PAUSED</code></td><td>Drain queued work and emit no OS input until an operator-authorized resume.</td></tr>
+        <tr><td>Session cap</td><td><code>STOPPED</code></td><td>Warlord stops action selection idempotently; Prophet suppresses casts after observing the stopped party state.</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="configuration">Profile controls</h2>
+    <p><code>profiles/warlord.yaml</code> defines pull, AoE, loot, recovery, inventory, and timing
+      bindings. <code>profiles/prophet.yaml</code> defines buff durations, cast keys, safety radius,
+      and retry cadence. Invalid profiles fail at startup.</p>
+
+    <h2 id="verification">Verify the FSMs</h2>
+    <pre><code>.venv/bin/python -m pytest tests/test_story_6_1_warlord_combat.py \
+  tests/test_story_6_2_prophet_buff_fsm.py \
+  tests/test_story_6_3_death_recovery.py \
+  tests/test_story_6_4_inventory_return.py \
+  tests/test_story_6_5_session_cap_shutdown.py -q</code></pre>
+
+    <div class="page-nav"></div>
+  </main>
+  <aside id="toc" class="toc"></aside>
+</div>
+<script src="assets/search-index.js"></script>
+<script src="assets/app.js" data-page="combat-mode"></script>
+</body>
+</html>

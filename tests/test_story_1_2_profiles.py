@@ -43,7 +43,7 @@ def test_profile_is_reread_after_file_change(tmp_path: Path):
 @pytest.mark.parametrize("profile_class", ["warlord", "prophet"])
 def test_cli_logs_loaded_profile(profile_class: str):
     result = subprocess.run(
-        [sys.executable, "-m", "lagent.agent", "--class", profile_class],
+        [sys.executable, "-m", "lagent.agent", "--class", profile_class, "--check"],
         capture_output=True,
         text=True,
         check=False,

@@ -50,6 +50,7 @@ def test_recording_flag_is_added_only_to_agent_launches():
     gpu = manager.build_process_command("gpu_server", "s", "warlord", recording=True)
     assert "--record" in agent
     assert "--record" not in gpu
+    assert gpu[-2:] == ["--session-id", "s"]
 
 
 def test_halt_notifications_are_deduplicated_per_event():

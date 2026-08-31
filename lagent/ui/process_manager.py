@@ -76,6 +76,21 @@ class ProcessManager:
             "profile": "shadow",
         },
     }
+
+    # Per-session-profile agent identity: which --class each agent runs and which window it captures.
+    AGENT_LAUNCH_SPECS = {
+        "fishing": {
+            "warlord_agent": {"class": "fishing", "window": "Lineage II"},
+        },
+        "warlord": {
+            "warlord_agent": {"class": "warlord", "window": "Lineage II"},
+            "prophet_agent": {"class": "prophet", "window": "Lineage II - 2"},
+        },
+        "shadow": {
+            "warlord_agent": {"class": "warlord", "window": "Lineage II"},
+            "prophet_agent": {"class": "prophet", "window": "Lineage II - 2"},
+        },
+    }
     
     def __init__(
         self,
@@ -204,19 +219,37 @@ class ProcessManager:
     
     def build_process_command(self, process_name: str, session_id: str, profile: str, recording: bool = False) -> List[str]:
         """Build a child command, adding recording only at Agent launch time."""
-        process_config = {
-            "gpu_server": {"module": "lagent.gpu_server", "args": ["--session-id", session_id]},
-            "warlord_agent": {"module": "lagent.agent", "args": ["--profile", profile, "--session-id", session_id, "--mode", "active"]},
-            "prophet_agent": {"module": "lagent.agent", "args": ["--profile", profile, "--session-id", session_id, "--mode", "active"]},
-            "orchestrator": {"module": "lagent.orchestrator", "args": ["--session-id", session_id]},
-        }
-        if process_name not in process_config:
+        if process_name == "gpu_server":
+            return [sys.executable, "-m", "lagent.gpu_server", "--session-id", session_id]
+        if process_name == "orchestrator":
+            return [sys.executable, "-m", "lagent.orchestrator", "--session-id", session_id]
+        if not process_name.endswith("_agent"):
             raise ValueError(f"Unknown process: {process_name}")
-        config = process_config[process_name]
-        args = list(config["args"])
-        if recording and process_name.endswith("_agent"):
-            args.append("--record")
-        return [sys.executable, "-m", config["module"]] + args
+
+        specs = self.AGENT_LAUNCH_SPECS.get(profile)
+        if specs is None:
+            raise ValueError(f"Unknown profile: {profile}")
+        spec = specs.get(process_name)
+        if spec is None:
+            raise ValueError(f"Process {process_name} is not part of profile {profile}")
+
+        cmd = [
+            sys.executable,
+            "-m",
+            "lagent.agent",
+            "--class",
+            spec["class"],
+            "--session-id",
+            session_id,
+            "--window-title",
+            spec["window"],
+        ]
+        # --record and --shadow are mutually exclusive; recording already suppresses OS input.
+        if recording:
+            cmd.append("--record")
+        elif profile == "shadow":
+            cmd.append("--shadow")
+        return cmd
 
     def _launch_process(self, process_name: str, session_id: str, profile: str, recording: bool = False) -> subprocess.Popen:
         """
@@ -256,8 +289,9 @@ class ProcessManager:
             raise RuntimeError("No session is running")
         group = self.current_session
         config = self.map_mode_to_profile(group.mode)
-        for name in ("warlord_agent", "prophet_agent"):
-            proc = group.processes.pop(name, None)
+        agent_names = [name for name in config["processes"] if name.endswith("_agent")]
+        for name in agent_names:
+            proc = group.processes.get(name)
             if proc is not None and proc.poll() is None:
                 proc.terminate()
                 try:
@@ -265,7 +299,7 @@ class ProcessManager:
                 except subprocess.TimeoutExpired:
                     proc.kill()
         try:
-            self._launch_child_processes(group, {"processes": ["warlord_agent", "prophet_agent"]}, recording_mode=recording)
+            self._launch_child_processes(group, {"processes": agent_names}, recording_mode=recording)
         except Exception:
             self._rollback_startup(group)
             self.current_session = None
