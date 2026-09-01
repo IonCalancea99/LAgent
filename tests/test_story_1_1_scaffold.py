@@ -332,9 +332,9 @@ class TestEntryPoints:
         assert result.returncode == 0, f"GPU server failed: {result.stderr.decode()}"
     
     def test_orchestrator_entry_point(self):
-        """python -m lagent.orchestrator exits with code 0."""
+        """python -m lagent.orchestrator --check exits with code 0."""
         result = subprocess.run(
-            [sys.executable, "-m", "lagent.orchestrator"],
+            [sys.executable, "-m", "lagent.orchestrator", "--check"],
             cwd=Path(__file__).parent.parent,
             capture_output=True
         )

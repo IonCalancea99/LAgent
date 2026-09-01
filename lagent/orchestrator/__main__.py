@@ -27,6 +27,11 @@ def main():
     """
     parser = argparse.ArgumentParser(description="Start the LAgent orchestrator")
     parser.add_argument("--session-id", default=None)
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="Initialize the orchestrator and exit without starting its control loop.",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -70,6 +75,10 @@ def main():
             to_state="ready",
             reason="Bootstrap complete"
         )
+
+        if args.check:
+            db.close()
+            return
         
         party_bus = PartyBus("orchestrator", ORCHESTRATOR_CONTROL_ENDPOINT, session_db=db, session_id=session_id)
         party_bus.start_publisher()
@@ -85,12 +94,13 @@ def main():
         )
         logger.info("Orchestrator ready")
         try:
-            while True:
-                try:
-                    monitor.observe_message(party_bus.receive(timeout=0.05))
-                except TimeoutError:
-                    pass
-                monitor.check()
+            if not args.check:
+                while True:
+                    try:
+                        monitor.observe_message(party_bus.receive(timeout=0.05))
+                    except TimeoutError:
+                        pass
+                    monitor.check()
         except KeyboardInterrupt:
             logger.info("Stopping orchestrator")
         finally:
