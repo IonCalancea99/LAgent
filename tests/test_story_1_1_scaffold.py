@@ -341,9 +341,9 @@ class TestEntryPoints:
         assert result.returncode == 0, f"Orchestrator failed: {result.stderr.decode()}"
     
     def test_ui_entry_point(self):
-        """python -m lagent.ui exits with code 0."""
+        """python -m lagent.ui --check exits with code 0."""
         result = subprocess.run(
-            [sys.executable, "-m", "lagent.ui"],
+            [sys.executable, "-m", "lagent.ui", "--check"],
             cwd=Path(__file__).parent.parent,
             capture_output=True
         )

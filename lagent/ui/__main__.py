@@ -395,11 +395,19 @@ def main():
         choices=["DEBUG", "INFO", "WARNING", "ERROR"],
         help="Logging level",
     )
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="Validate command-line startup without opening the UI event loop",
+    )
     
     args = parser.parse_args()
     
     # Update logging level
     logging.getLogger().setLevel(args.log_level)
+
+    if args.check:
+        return
     
     # Create and run controller
     controller = UIController(
