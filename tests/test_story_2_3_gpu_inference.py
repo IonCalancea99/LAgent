@@ -1,8 +1,39 @@
+import sys
 import threading
 import time
 
 from lagent.common.transport import AgentTransport, make_endpoint
 from lagent.gpu_server.server import GpuInferenceServer, YoloInference
+
+
+def _cleanup_server(clients, server, thread, server_errors):
+    cleanup_errors = []
+    for agent_id, client in clients.items():
+        try:
+            client.close()
+        except Exception as exc:
+            exc.add_note(f"Failed to close {agent_id} transport")
+            cleanup_errors.append(exc)
+    try:
+        server.stop()
+    except Exception as exc:
+        exc.add_note("Failed to stop GPU server")
+        cleanup_errors.append(exc)
+    thread.join(timeout=1.0)
+    if thread.is_alive():
+        cleanup_errors.append(
+            AssertionError("GPU server thread did not terminate after bounded join")
+        )
+    for error in server_errors:
+        error.add_note("GPU server thread failed")
+        cleanup_errors.append(error)
+
+    primary_error = sys.exception()
+    if primary_error is not None:
+        for error in cleanup_errors:
+            primary_error.add_note(f"Cleanup failure: {error!r}")
+    elif cleanup_errors:
+        raise ExceptionGroup("Transport cleanup failed", cleanup_errors)
 
 
 class FakeBoxes:
@@ -59,32 +90,82 @@ def test_server_routes_each_inference_result_to_its_agent():
             confidence_threshold=0.5,
         ),
     )
-    thread = threading.Thread(target=server.serve, daemon=True)
+    server_errors = []
+
+    def serve():
+        try:
+            server.serve()
+        except Exception as exc:
+            server_errors.append(exc)
+
+    thread = threading.Thread(target=serve, daemon=True)
     thread.start()
     time.sleep(0.03)
-    clients = [AgentTransport("warlord", server_endpoint), AgentTransport("prophet", server_endpoint)]
+    clients = {
+        agent_id: AgentTransport(agent_id, server_endpoint)
+        for agent_id in ("warlord", "prophet")
+    }
     try:
-        for client in clients:
+        for client in clients.values():
             client.connect()
-        results = [None, None]
+        results = {}
+        errors = {}
+        request_timeout = 0.1
+        start_barrier = threading.Barrier(len(clients))
 
-        def request(index):
-            results[index] = clients[index].request_inference(b"frame", {}, timeout=0.1)
+        def request(agent_id):
+            try:
+                start_barrier.wait(timeout=1.0)
+                results[agent_id] = clients[agent_id].request_inference(
+                    b"frame", {}, timeout=request_timeout
+                )
+            except Exception as exc:
+                errors[agent_id] = exc
 
-        request_threads = [threading.Thread(target=request, args=(index,)) for index in range(2)]
+        request_threads = {
+            agent_id: threading.Thread(
+                target=request,
+                args=(agent_id,),
+                daemon=True,
+            )
+            for agent_id in clients
+        }
         started = time.perf_counter()
-        for request_thread in request_threads:
+        for request_thread in request_threads.values():
             request_thread.start()
-        for request_thread in request_threads:
-            request_thread.join(timeout=1)
+        for request_thread in request_threads.values():
+            request_thread.join(timeout=request_timeout + 0.5)
         elapsed_ms = (time.perf_counter() - started) * 1000
 
-        assert all(result is not None for result in results)
-        assert elapsed_ms < 100
-        assert [result.agent_id for result in results] == ["warlord", "prophet"]
-        assert [result.result.detections[1].class_name for result in results] == ["warlord", "prophet"]
+        request_failures = []
+        for agent_id, request_thread in request_threads.items():
+            if request_thread.is_alive():
+                request_failures.append(
+                    AssertionError(
+                        f"{agent_id} request thread did not terminate after bounded join"
+                    )
+                )
+            if agent_id in errors:
+                errors[agent_id].add_note(f"{agent_id} inference request failed")
+                request_failures.append(errors[agent_id])
+        if request_failures:
+            raise ExceptionGroup("Inference requests failed", request_failures)
+
+        for agent_id in clients:
+            assert agent_id in results, f"{agent_id} inference request produced no result"
+            result = results[agent_id]
+            assert result.agent_id == agent_id, (
+                f"{agent_id} received response for {result.agent_id}"
+            )
+            assert len(result.result.detections) > 1, (
+                f"{agent_id} response omitted its class-specific detection"
+            )
+            class_name = result.result.detections[1].class_name
+            assert class_name == agent_id, (
+                f"{agent_id} received class-specific detection {class_name!r}"
+            )
+        assert elapsed_ms < 100, (
+            f"concurrent inference requests took {elapsed_ms:.1f}ms, expected under 100ms"
+        )
     finally:
-        for client in clients:
-            client.close()
-        server.stop()
-        thread.join(timeout=1)
+        _cleanup_server(clients, server, thread, server_errors)
