@@ -1,5 +1,6 @@
 """Focused Story 8.2 tests for overlay telemetry and deterministic formatting."""
 
+import gc
 import tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -43,11 +44,14 @@ def test_latest_state_is_sanitized_and_missing_agent_is_stale():
             "state": "PULLING", "hp_percent": 125, "mp_percent": -2,
         })
         now = datetime.now()
-        rows = TelemetryReader(database.path).read("session-1", now)
+        reader = TelemetryReader(database.path)
+        rows = reader.read("session-1", now)
         assert rows["WL"].state == "PULLING"
         assert rows["WL"].hp_percent == 100 and rows["WL"].mp_percent == 0
         assert rows["PP"].state == "Stopped" and rows["PP"].stale
+        del reader
     finally:
+        gc.collect()
         database.close()
         directory.cleanup()
 
@@ -72,7 +76,9 @@ def test_malformed_event_retains_last_valid_snapshot_and_rollover_discards_it():
         database.log_session_start("session-2", "combat", "combat")
         rolled = reader.read("session-2", datetime.now())["WL"]
         assert rolled.state == "Stopped" and rolled.hp_percent is None
+        del reader
     finally:
+        gc.collect()
         database.close()
         directory.cleanup()
 
@@ -87,9 +93,12 @@ def test_event_age_marks_row_stale():
             ("session-1", old, "agent.prophet", "state", '{"state":"BUFFING"}'),
         )
         database.conn.commit()
-        row = TelemetryReader(database.path).read("session-1", datetime.now())["PP"]
+        reader = TelemetryReader(database.path)
+        row = reader.read("session-1", datetime.now())["PP"]
         assert row.state == "BUFFING" and row.stale
+        del reader
     finally:
+        gc.collect()
         database.close()
         directory.cleanup()
 

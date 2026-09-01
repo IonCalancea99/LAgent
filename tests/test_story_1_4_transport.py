@@ -2,9 +2,10 @@ import logging
 import sys
 import threading
 import time
+from unittest.mock import Mock
 
 from lagent.agent.party_bus import PartyBus
-from lagent.common import GameState, PartyState
+from lagent.common import GameState, PartyState, PerceptionResult
 from lagent.common.transport import (
     AgentTransport,
     MessageType,
@@ -57,7 +58,10 @@ def _cleanup_server(clients, server, thread, server_errors):
 
 def test_gpu_routes_stub_result_to_originating_agent():
     server_endpoint = make_endpoint()
-    server = GpuInferenceServer(server_endpoint)
+    # Create a mocked inference engine to avoid downloading EasyOCR model
+    mock_inference = Mock()
+    mock_inference.detect.return_value = PerceptionResult(detections=[], ocr_values={})
+    server = GpuInferenceServer(server_endpoint, inference=mock_inference)
     server_errors = []
 
     def serve():

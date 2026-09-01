@@ -503,13 +503,23 @@ class SessionsDB:
             except Exception as e:
                 logger.error(f"Error closing database connection: {e}")
             finally:
+                import gc
+                import time
+                # Force garbage collection to ensure all references are released
+                gc.collect()
+                # On Windows, SQLite file handles may not be immediately released.
+                # Wait briefly and retry WAL file cleanup to ensure all handles are freed.
+                time.sleep(0.02)
                 for suffix in ("-wal", "-shm"):
                     sidecar = Path(f"{self.path}{suffix}")
-                    try:
-                        if sidecar.exists():
-                            sidecar.unlink()
-                    except OSError:
-                        pass
+                    if sidecar.exists():
+                        for attempt in range(3):
+                            try:
+                                sidecar.unlink()
+                                break
+                            except OSError:
+                                if attempt < 2:
+                                    time.sleep(0.01)
                 self.conn = None
                 logger.debug(f"SessionsDB closed: {self.path}")
     
