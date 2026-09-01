@@ -500,9 +500,18 @@ class SessionsDB:
         if self.conn:
             try:
                 self.conn.close()
-                logger.debug(f"SessionsDB closed: {self.path}")
             except Exception as e:
                 logger.error(f"Error closing database connection: {e}")
+            finally:
+                for suffix in ("-wal", "-shm"):
+                    sidecar = Path(f"{self.path}{suffix}")
+                    try:
+                        if sidecar.exists():
+                            sidecar.unlink()
+                    except OSError:
+                        pass
+                self.conn = None
+                logger.debug(f"SessionsDB closed: {self.path}")
     
     def __enter__(self):
         """Context manager entry."""

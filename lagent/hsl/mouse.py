@@ -296,11 +296,14 @@ class HSL:
         if self.shadow:
             return
         controller = self._get_controller()
-        try:
-            from pynput.mouse import Button
-            button_value = getattr(Button, button)
-        except (ImportError, AttributeError):
-            button_value = button
+        button_value = button
+        controller_module = getattr(type(controller), "__module__", "")
+        if controller_module.startswith("pynput"):
+            try:
+                from pynput.mouse import Button
+                button_value = getattr(Button, button)
+            except (ImportError, AttributeError):
+                button_value = button
         controller.click(button_value, clicks=clicks)
 
     def _log_override(self, session_id: str | None, sessions_db: Any, payload: dict[str, Any]) -> None:

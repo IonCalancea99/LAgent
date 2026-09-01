@@ -135,15 +135,15 @@ class PartyState(BaseModel):
     This is the only state intended to cross process boundaries.
     Serializable for ZeroMQ JSON and SQLite event payloads.
     """
-    fsm_state: str = Field(description="Finite state machine state name")
-    hp_percent: float = Field(ge=0.0, le=100.0, description="HP as percentage")
-    mp_percent: float = Field(ge=0.0, le=100.0, description="MP as percentage")
-    position: Tuple[int, int] = Field(description="(x, y) position")
+    fsm_state: str = Field(default="IDLE", description="Finite state machine state name")
+    hp_percent: float = Field(default=100.0, ge=0.0, le=100.0, description="HP as percentage")
+    mp_percent: float = Field(default=100.0, ge=0.0, le=100.0, description="MP as percentage")
+    position: Tuple[int, int] = Field(default=(0, 0), description="(x, y) position")
     buff_presence: Dict[str, bool] = Field(
         default_factory=dict, 
         description="Map of buff_name to presence boolean"
     )
-    heartbeat_timestamp: float = Field(description="Unix timestamp of last heartbeat")
+    heartbeat_timestamp: float = Field(default=0.0, description="Unix timestamp of last heartbeat")
 
 
 class Action(BaseModel):

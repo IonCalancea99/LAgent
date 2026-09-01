@@ -45,8 +45,15 @@ def validate_roi_positions(
     roi_positions: dict[str, Any] | Any,
     width: int,
     height: int,
+    *,
+    strict: bool = True,
 ) -> dict[str, tuple[int, int, int, int]]:
-    """Validate ROI coordinates against a frame size and return normalized values."""
+    """Validate ROI coordinates against a frame size and return normalized values.
+
+    When strict=False, coordinates that exceed the current frame are clipped to the
+    frame bounds instead of raising. This keeps profile coordinates that are valid for
+    world-space or larger capture windows from failing during extraction.
+    """
     if not isinstance(roi_positions, dict):
         raise ProfileValidationError(f"roi_positions must be a mapping, got {type(roi_positions).__name__}")
 
@@ -64,10 +71,17 @@ def validate_roi_positions(
             raise ProfileValidationError(f"ROI '{name}' has negative coordinates: {(x1, y1, x2, y2)}")
         if x2 <= x1 or y2 <= y1:
             raise ProfileValidationError(f"ROI '{name}' must have x2 > x1 and y2 > y1: {(x1, y1, x2, y2)}")
-        if x2 > width or y2 > height:
+        if strict and (x2 > width or y2 > height):
             raise ProfileValidationError(
                 f"ROI '{name}' out of bounds for frame size {width}x{height}: {(x1, y1, x2, y2)}"
             )
+
+        x1 = max(0, min(x1, width))
+        y1 = max(0, min(y1, height))
+        x2 = max(0, min(x2, width))
+        y2 = max(0, min(y2, height))
+        if x2 <= x1 or y2 <= y1:
+            raise ProfileValidationError(f"ROI '{name}' collapses to an empty region after clipping: {(x1, y1, x2, y2)}")
 
         normalized[name] = (x1, y1, x2, y2)
 
@@ -86,7 +100,7 @@ def extract_roi_map(frame: Any, profile: AgentProfile | Any, *, width: int | Non
     if width is None or height is None:
         height, width = _frame_size(frame)
 
-    validated = validate_roi_positions(roi_positions, width=width, height=height)
+    validated = validate_roi_positions(roi_positions, width=width, height=height, strict=False)
 
     extracted: dict[str, Any] = {}
     for name, (x1, y1, x2, y2) in validated.items():

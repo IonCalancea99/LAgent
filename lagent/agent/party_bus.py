@@ -57,6 +57,7 @@ class PartyBus:
 
     def subscribe(self, endpoint: str) -> None:
         self.subscriber.connect(endpoint)
+        time.sleep(0.05)
 
     def publish_state(self, state: dict[str, Any]) -> None:
         if not isinstance(state, dict):

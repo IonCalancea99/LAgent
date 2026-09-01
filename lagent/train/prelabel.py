@@ -147,8 +147,11 @@ def run_inference_on_batch(
     for frame_path in frame_paths:
         frame = load_frame_safe(frame_path)
         if frame is None:
-            logger.warning("Skipping frame due to load failure: %s", frame_path)
-            continue
+            if frame_path.exists():
+                logger.warning("Skipping frame due to load failure: %s", frame_path)
+                continue
+            logger.warning("Falling back to detector path handling for missing frame: %s", frame_path)
+            frame = frame_path
         
         try:
             # Use 'common' as agent_id for prelabeling (offline, no specific agent)
