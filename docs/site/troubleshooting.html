@@ -35,11 +35,24 @@
     <p><strong>Cause:</strong> a command targeted the system/OS-managed Python instead of the
       project's virtual environment.</p>
     <p><strong>Fix:</strong></p>
-    <pre><code>cd /path/to/LAgent
+    <div class="command-pair">
+      <div class="command-block">
+        <h3>macOS / Linux (bash, zsh)</h3>
+        <pre><code>cd /path/to/LAgent
 python3.12 -m venv .venv
 source .venv/bin/activate
 python -m pip install -U pip
 python -m pip install -e .</code></pre>
+      </div>
+      <div class="command-block">
+        <h3>Windows PowerShell</h3>
+        <pre><code>cd C:\path\to\LAgent
+py -3.12 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -U pip
+python -m pip install -e .</code></pre>
+      </div>
+    </div>
     <ul>
       <li>Never run <code>python3 -m pip install ...</code> or <code>pip install ...</code> against the system interpreter.</li>
       <li>Never pass <code>--break-system-packages</code> to work around the PEP 668 guard.</li>
@@ -51,9 +64,21 @@ python -m pip install -e .</code></pre>
       (e.g. an IDE-integrated shell), you can end up with three different Python states: system
       Python, the project <code>.venv</code>, and whatever the editor defaults to. Always run
       both install and test commands from the same activated <code>.venv</code>:</p>
-    <pre><code>cd /path/to/LAgent
+    <div class="command-pair">
+      <div class="command-block">
+        <h3>macOS / Linux (bash, zsh)</h3>
+        <pre><code>cd /path/to/LAgent
 source .venv/bin/activate
 PYTHONPATH=. python -m pytest -q</code></pre>
+      </div>
+      <div class="command-block">
+        <h3>Windows PowerShell</h3>
+        <pre><code>cd C:\path\to\LAgent
+.\.venv\Scripts\Activate.ps1
+$env:PYTHONPATH = "."
+python -m pytest -q</code></pre>
+      </div>
+    </div>
 
     <h2 id="platform-errors">Platform-specific package errors</h2>
     <div class="callout warn">
@@ -97,8 +122,18 @@ PYTHONPATH=. python -m pytest -q</code></pre>
     <h2 id="docker-fallback">Prefer Docker for repeatable validation</h2>
     <p>For CI-like or repeatable checks, use the project's container path instead of ad hoc
       local <code>pip</code> attempts:</p>
-    <pre><code>docker build -t lagent-test .
+    <div class="command-pair">
+      <div class="command-block">
+        <h3>macOS / Linux (bash, zsh)</h3>
+        <pre><code>docker build -t lagent-test .
 docker run --rm lagent-test</code></pre>
+      </div>
+      <div class="command-block">
+        <h3>Windows PowerShell</h3>
+        <pre><code>docker build -t lagent-test .
+docker run --rm lagent-test</code></pre>
+      </div>
+    </div>
 
     <h2 id="decision-rule">Decision rule</h2>
     <div class="callout ok">

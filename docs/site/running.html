@@ -28,9 +28,27 @@
 
     <h2 id="tray-ui">Launching via the tray/UI (normal usage)</h2>
     <p>The Tray/UI process is the sole launcher of every other runtime process. Start it with:</p>
-    <pre><code>python -m lagent.ui</code></pre>
+    <div class="command-pair">
+      <div class="command-block">
+        <h3>macOS / Linux (bash, zsh)</h3>
+        <pre><code>python -m lagent.ui</code></pre>
+      </div>
+      <div class="command-block">
+        <h3>Windows PowerShell</h3>
+        <pre><code>python -m lagent.ui</code></pre>
+      </div>
+    </div>
     <p>or, after installation, the console script:</p>
-    <pre><code>lagent-ui</code></pre>
+    <div class="command-pair">
+      <div class="command-block">
+        <h3>macOS / Linux (bash, zsh)</h3>
+        <pre><code>lagent-ui</code></pre>
+      </div>
+      <div class="command-block">
+        <h3>Windows PowerShell</h3>
+        <pre><code>lagent-ui</code></pre>
+      </div>
+    </div>
     <p>No main window or taskbar entry appears — the tray icon in the notification area is the
       entire control surface. Left as-is, LAgent does nothing until you start a session from the
       tray menu.</p>
@@ -53,20 +71,49 @@
       in isolation.
     </div>
     <p>Each process can also be started standalone for debugging:</p>
-    <pre><code># GPU Inference Server — owns all YOLO/EasyOCR/CUDA calls
+    <div class="command-pair">
+      <div class="command-block">
+        <h3>macOS / Linux (bash, zsh)</h3>
+        <pre><code># GPU Inference Server -- owns all YOLO/EasyOCR/CUDA calls
 python -m lagent.gpu_server [--session-id SESSION_ID]
 
-# Party Orchestrator — relays party state, monitors heartbeats
+# Party Orchestrator -- relays party state, monitors heartbeats
 python -m lagent.orchestrator [--session-id SESSION_ID]
 
-# Agent — one process per character window
+# Agent -- one process per character window
 python -m lagent.agent --class warlord --window-title "Lineage II"
 python -m lagent.agent --class prophet --window-title "Lineage II - 2"</code></pre>
+      </div>
+      <div class="command-block">
+        <h3>Windows PowerShell</h3>
+        <pre><code># GPU Inference Server -- owns all YOLO/EasyOCR/CUDA calls
+python -m lagent.gpu_server --session-id SESSION_ID
+
+# Party Orchestrator -- relays party state, monitors heartbeats
+python -m lagent.orchestrator --session-id SESSION_ID
+
+# Agent -- one process per character window
+python -m lagent.agent --class warlord --window-title "Lineage II"
+python -m lagent.agent --class prophet --window-title "Lineage II - 2"</code></pre>
+      </div>
+    </div>
     <p>Console-script equivalents installed by <code>pyproject.toml</code>:</p>
-    <pre><code>lagent-gpu-server
+    <div class="command-pair">
+      <div class="command-block">
+        <h3>macOS / Linux (bash, zsh)</h3>
+        <pre><code>lagent-gpu-server
 lagent-orchestrator
 lagent-agent
 lagent-ui</code></pre>
+      </div>
+      <div class="command-block">
+        <h3>Windows PowerShell</h3>
+        <pre><code>lagent-gpu-server
+lagent-orchestrator
+lagent-agent
+lagent-ui</code></pre>
+      </div>
+    </div>
 
     <h2 id="tray-child-contract">Tray-to-child CLI contract</h2>
     <p>The tray builds these argument vectors. All children in one process group receive the same

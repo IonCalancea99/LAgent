@@ -46,19 +46,59 @@
     </div>
 
     <h2 id="create-venv">1. Create and activate a virtual environment</h2>
-    <pre><code>cd /path/to/LAgent
+    <div class="command-pair">
+      <div class="command-block">
+        <h3>macOS / Linux (bash, zsh)</h3>
+        <pre><code>cd /path/to/LAgent
 python3.12 -m venv .venv
-source .venv/bin/activate        # Windows: .venv\Scripts\activate
+source .venv/bin/activate
 python -m pip install -U pip</code></pre>
+      </div>
+      <div class="command-block">
+        <h3>Windows PowerShell</h3>
+        <pre><code>cd C:\path\to\LAgent
+py -3.12 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -U pip</code></pre>
+      </div>
+    </div>
     <p>Confirm the venv's interpreter is active before continuing:</p>
-    <pre><code>which python      # should point inside .venv
+    <div class="command-pair">
+      <div class="command-block">
+        <h3>macOS / Linux (bash, zsh)</h3>
+        <pre><code>which python      # should point inside .venv
 python --version  # should report 3.12.x</code></pre>
+      </div>
+      <div class="command-block">
+        <h3>Windows PowerShell</h3>
+        <pre><code>(Get-Command python).Source  # should point inside .venv\Scripts
+python --version             # should report 3.12.x</code></pre>
+      </div>
+    </div>
 
     <h2 id="install-package">2. Install the package</h2>
     <p>Install in editable mode so code changes are picked up immediately:</p>
-    <pre><code>python -m pip install -e .</code></pre>
+    <div class="command-pair">
+      <div class="command-block">
+        <h3>macOS / Linux (bash, zsh)</h3>
+        <pre><code>python -m pip install -e .</code></pre>
+      </div>
+      <div class="command-block">
+        <h3>Windows PowerShell</h3>
+        <pre><code>python -m pip install -e .</code></pre>
+      </div>
+    </div>
     <p>For development (tests, linting, formatting), install the optional <code>dev</code> extras:</p>
-    <pre><code>python -m pip install -e ".[dev]"</code></pre>
+    <div class="command-pair">
+      <div class="command-block">
+        <h3>macOS / Linux (bash, zsh)</h3>
+        <pre><code>python -m pip install -e ".[dev]"</code></pre>
+      </div>
+      <div class="command-block">
+        <h3>Windows PowerShell</h3>
+        <pre><code>python -m pip install -e ".[dev]"</code></pre>
+      </div>
+    </div>
     <p>This pulls in <code>pytest</code>, <code>pytest-cov</code>, <code>black</code>, and <code>ruff</code> in addition to the runtime dependencies declared in <code>pyproject.toml</code> (Pydantic, PyYAML, PyZMQ, structlog, Ultralytics YOLO, MLflow, Pillow, yt-dlp, OpenCV, EasyOCR, dxcam, mss, pynput, pystray, PyQt6).</p>
     <div class="callout warn">
       <strong class="callout-title">Use Python 3.12, not a newer interpreter</strong>
@@ -91,8 +131,18 @@ python --version  # should report 3.12.x</code></pre>
     <h2 id="docker">4. Alternative: Docker-based setup</h2>
     <p>The repository ships a <code>Dockerfile</code> that builds a minimal, reproducible test
       image without the platform-specific packages:</p>
-    <pre><code>docker build -t lagent-test .
+    <div class="command-pair">
+      <div class="command-block">
+        <h3>macOS / Linux (bash, zsh)</h3>
+        <pre><code>docker build -t lagent-test .
 docker run --rm lagent-test</code></pre>
+      </div>
+      <div class="command-block">
+        <h3>Windows PowerShell</h3>
+        <pre><code>docker build -t lagent-test .
+docker run --rm lagent-test</code></pre>
+      </div>
+    </div>
     <p>This installs only the cross-platform runtime dependencies plus <code>pytest</code>, then
       runs the test suite (<code>python -m pytest tests/ -v</code>) as the container's default
       command. Use this path for repeatable CI-like validation instead of ad hoc local
@@ -100,7 +150,17 @@ docker run --rm lagent-test</code></pre>
 
     <h2 id="verify">5. Verify the installation</h2>
     <p>Run the test suite from inside the activated virtual environment:</p>
-    <pre><code>PYTHONPATH=. python -m pytest -q</code></pre>
+    <div class="command-pair">
+      <div class="command-block">
+        <h3>macOS / Linux (bash, zsh)</h3>
+        <pre><code>PYTHONPATH=. python -m pytest -q</code></pre>
+      </div>
+      <div class="command-block">
+        <h3>Windows PowerShell</h3>
+        <pre><code>$env:PYTHONPATH = "."
+python -m pytest -q</code></pre>
+      </div>
+    </div>
     <p>A clean pass confirms the interpreter, package install, and import graph are all
       consistent. If you see missing-module errors, double-check that:</p>
     <ul class="checklist">

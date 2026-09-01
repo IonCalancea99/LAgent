@@ -60,7 +60,16 @@
 
     <h2 id="validate">Validate the shadow replay</h2>
     <p>From the repository root, run the complete Epic 9 acceptance slice:</p>
-    <pre><code>.venv/bin/python -m pytest tests/test_story_9_8_quest_acceptance.py -q</code></pre>
+    <div class="command-pair">
+      <div class="command-block">
+        <h3>macOS / Linux (bash, zsh)</h3>
+        <pre><code>.venv/bin/python -m pytest tests/test_story_9_8_quest_acceptance.py -q</code></pre>
+      </div>
+      <div class="command-block">
+        <h3>Windows PowerShell</h3>
+        <pre><code>.\.venv\Scripts\python.exe -m pytest tests/test_story_9_8_quest_acceptance.py -q</code></pre>
+      </div>
+    </div>
     <p>A passing replay confirms that the fixture completes both objectives without emitting OS
       mouse or keyboard input, writes a reviewable event trace, and reaches terminal state
       <code>complete</code> with explicit completion evidence.</p>

@@ -41,7 +41,16 @@
     ├── warlord.yaml
     └── prophet.yaml</code></pre>
     <p>Create any missing directories before your first run:</p>
-    <pre><code>mkdir -p data recordings models/common models/warlord models/prophet</code></pre>
+    <div class="command-pair">
+      <div class="command-block">
+        <h3>macOS / Linux (bash, zsh)</h3>
+        <pre><code>mkdir -p data recordings models/common models/warlord models/prophet</code></pre>
+      </div>
+      <div class="command-block">
+        <h3>Windows PowerShell</h3>
+        <pre><code>New-Item -ItemType Directory -Force data, recordings, models/common, models/warlord, models/prophet</code></pre>
+      </div>
+    </div>
 
     <h2 id="profiles">Agent profiles (YAML)</h2>
     <p>Each character class (and the Fishing proof-of-concept) is driven entirely by a YAML

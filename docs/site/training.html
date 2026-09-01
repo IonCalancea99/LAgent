@@ -51,14 +51,32 @@
     <h2 id="recording">1. Recording gameplay</h2>
     <p>Start an agent process with <code>--record</code> to capture frames and your manual
       keyboard/mouse input simultaneously, with no interference to normal play:</p>
-    <pre><code>python -m lagent.agent --class warlord --record</code></pre>
+    <div class="command-pair">
+      <div class="command-block">
+        <h3>macOS / Linux (bash, zsh)</h3>
+        <pre><code>python -m lagent.agent --class warlord --record</code></pre>
+      </div>
+      <div class="command-block">
+        <h3>Windows PowerShell</h3>
+        <pre><code>python -m lagent.agent --class warlord --record</code></pre>
+      </div>
+    </div>
     <p>Or use the "Recording Mode" toggle from the tray menu. Recording is mutually exclusive
       with a live automated session at process launch. Output is written under
       <code>recordings/</code>.</p>
 
     <h2 id="ingestion">2a. (Optional) YouTube frame ingestion</h2>
     <p>Supplement your own recordings with frames extracted from a public video:</p>
-    <pre><code>python -m lagent.train ingest --url "&lt;video-url&gt;" --fps 5 --output-dir recordings</code></pre>
+    <div class="command-pair">
+      <div class="command-block">
+        <h3>macOS / Linux (bash, zsh)</h3>
+        <pre><code>python -m lagent.train ingest --url "&lt;video-url&gt;" --fps 5 --output-dir recordings</code></pre>
+      </div>
+      <div class="command-block">
+        <h3>Windows PowerShell</h3>
+        <pre><code>python -m lagent.train ingest --url "&lt;video-url&gt;" --fps 5 --output-dir recordings</code></pre>
+      </div>
+    </div>
     <table>
       <thead><tr><th>Flag</th><th>Default</th><th>Description</th></tr></thead>
       <tbody>
@@ -73,11 +91,24 @@
     <h2 id="prelabeling">2b. Auto-prelabeling</h2>
     <p>Run the current YOLO models over every captured frame to produce a first-pass annotation
       file in Label Studio import format:</p>
-    <pre><code>python -m lagent.train prelabel \
+    <div class="command-pair">
+      <div class="command-block">
+        <h3>macOS / Linux (bash, zsh)</h3>
+        <pre><code>python -m lagent.train prelabel \
     --recording recordings/&lt;session-folder&gt; \
     --batch-size 32 \
     --confidence-threshold 0.5 \
     --model-root models</code></pre>
+      </div>
+      <div class="command-block">
+        <h3>Windows PowerShell</h3>
+        <pre><code>python -m lagent.train prelabel `
+    --recording recordings\SESSION_FOLDER `
+    --batch-size 32 `
+    --confidence-threshold 0.5 `
+    --model-root models</code></pre>
+      </div>
+    </div>
     <table>
       <thead><tr><th>Flag</th><th>Default</th><th>Description</th></tr></thead>
       <tbody>
@@ -91,7 +122,10 @@
       missing labels before training.</p>
 
     <h2 id="train">3. Model training</h2>
-    <pre><code>python -m lagent.train train \
+    <div class="command-pair">
+      <div class="command-block">
+        <h3>macOS / Linux (bash, zsh)</h3>
+        <pre><code>python -m lagent.train train \
     --recording recordings/&lt;session-folder&gt; \
     --model-class warlord \
     --epochs 10 \
@@ -102,6 +136,22 @@
     --mlflow-dir models/.mlflow \
     --mAP-threshold 0.65 \
     --device cuda</code></pre>
+      </div>
+      <div class="command-block">
+        <h3>Windows PowerShell</h3>
+        <pre><code>python -m lagent.train train `
+    --recording recordings\SESSION_FOLDER `
+    --model-class warlord `
+    --epochs 10 `
+    --batch-size 16 `
+    --validation-split 0.8 `
+    --lr 0.001 `
+    --model-root models `
+    --mlflow-dir models\.mlflow `
+    --mAP-threshold 0.65 `
+    --device cuda</code></pre>
+      </div>
+    </div>
     <table>
       <thead><tr><th>Flag</th><th>Default</th><th>Description</th></tr></thead>
       <tbody>

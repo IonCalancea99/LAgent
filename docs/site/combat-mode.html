@@ -65,11 +65,24 @@
       and retry cadence. Invalid profiles fail at startup.</p>
 
     <h2 id="verification">Verify the FSMs</h2>
-    <pre><code>.venv/bin/python -m pytest tests/test_story_6_1_warlord_combat.py \
+    <div class="command-pair">
+      <div class="command-block">
+        <h3>macOS / Linux (bash, zsh)</h3>
+        <pre><code>.venv/bin/python -m pytest tests/test_story_6_1_warlord_combat.py \
   tests/test_story_6_2_prophet_buff_fsm.py \
   tests/test_story_6_3_death_recovery.py \
   tests/test_story_6_4_inventory_return.py \
   tests/test_story_6_5_session_cap_shutdown.py -q</code></pre>
+      </div>
+      <div class="command-block">
+        <h3>Windows PowerShell</h3>
+        <pre><code>.\.venv\Scripts\python.exe -m pytest tests/test_story_6_1_warlord_combat.py `
+  tests/test_story_6_2_prophet_buff_fsm.py `
+  tests/test_story_6_3_death_recovery.py `
+  tests/test_story_6_4_inventory_return.py `
+  tests/test_story_6_5_session_cap_shutdown.py -q</code></pre>
+      </div>
+    </div>
 
     <div class="page-nav"></div>
   </main>
