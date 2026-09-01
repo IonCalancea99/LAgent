@@ -56,22 +56,216 @@
     <p>Each character class (and the Fishing proof-of-concept) is driven entirely by a YAML
       profile — there is no hardcoded behavior per class. Profiles live in <code>profiles/</code>
       and are loaded and validated by a Pydantic v2 schema (<code>AgentProfile</code>) at
-      startup.</p>
+      startup. The walkthrough below builds a profile field by field.</p>
+
+    <div class="diagram">
+      <div class="node">Copy a template</div>
+      <span class="arrow">→</span>
+      <div class="node">Map ROIs on screen</div>
+      <span class="arrow">→</span>
+      <div class="node">Design the FSM</div>
+      <span class="arrow">→</span>
+      <div class="node">Bind skills &amp; timers</div>
+      <span class="arrow">→</span>
+      <div class="node">Tune confidence &amp; timing</div>
+      <span class="arrow">→</span>
+      <div class="node">Validate &amp; run</div>
+    </div>
+    <p class="figure-caption">Figure 1 — the end-to-end profile creation workflow covered by Steps 1–7 below.</p>
+
+    <div class="callout warn">
+      <strong class="callout-title">Profiles tune one of three fixed classes today</strong>
+      The CLI (<code>--class</code> choices in <code>lagent/agent/__main__.py</code>), the
+      startup resolver (<code>SUPPORTED_PROFILES</code> in <code>lagent/agent/startup.py</code>),
+      and the tray launcher (<code>AGENT_LAUNCH_SPECS</code> in
+      <code>lagent/ui/process_manager.py</code>) all hardcode the same three names:
+      <code>warlord</code>, <code>prophet</code>, <code>fishing</code>. This guide walks through
+      re-authoring one of those profiles (e.g. to match your own resolution, key bindings, or
+      pacing) end to end — the YAML file alone is enough for that. Wiring up a genuinely new
+      fourth class name also requires code changes in those three places, not just a new profile
+      file.
+    </div>
+
+    <div class="step-block">
+      <h3 id="profile-step-1"><span class="step-badge">1</span>Start from the matching bundled template</h3>
+      <p>Pick whichever bundled profile matches the class you're configuring and use it as your
+        editing starting point (back it up first if you want to compare against the original):</p>
+      <table>
+        <thead><tr><th>Template</th><th>Good fit for…</th></tr></thead>
+        <tbody>
+          <tr><td><code>profiles/fishing.yaml</code></td><td>A single repeating skill loop with a wait/timeout state (crafting, gathering, simple farming)</td></tr>
+          <tr><td><code>profiles/warlord.yaml</code></td><td>Melee/DPS combat: pull → fight → loot, plus death <code>recovery</code> and <code>inventory</code> return rules</td></tr>
+          <tr><td><code>profiles/prophet.yaml</code></td><td>Support/buff classes: timer-driven casting with party proximity safety</td></tr>
+        </tbody>
+      </table>
+      <div class="command-pair">
+        <div class="command-block">
+          <h3>macOS / Linux</h3>
+          <pre><code>cp profiles/warlord.yaml profiles/warlord.yaml.bak</code></pre>
+        </div>
+        <div class="command-block">
+          <h3>Windows PowerShell</h3>
+          <pre><code>Copy-Item profiles/warlord.yaml profiles/warlord.yaml.bak</code></pre>
+        </div>
+      </div>
+    </div>
+
+    <div class="step-block">
+      <h3 id="profile-step-2"><span class="step-badge">2</span>Keep the identity field in sync</h3>
+      <p><code>name</code> must match both the file stem and the <code>--class</code> value
+        passed on the command line — all three stay aligned since you're editing an existing
+        supported class rather than renaming the file:</p>
+      <pre><code>name: warlord   # profiles/warlord.yaml  ⇄  --class warlord</code></pre>
+    </div>
+
+    <div class="step-block">
+      <h3 id="profile-step-3"><span class="step-badge">3</span>Map ROIs on your screen</h3>
+      <p><code>roi_positions</code> is a dictionary of named pixel rectangles
+        <code>[x1, y1, x2, y2]</code>, measured from the <strong>top-left corner (0, 0)</strong>
+        of the captured game window. Take a screenshot at your real play resolution, note the
+        pixel bounds of every element the agent needs to read (HP/MP bars, buff icons, a bite
+        or tension indicator, a mob-detection area), and record each as a rectangle.</p>
+
+      <div class="screen-mockup" role="img" aria-label="Schematic game window with labeled ROI rectangles">
+        <span class="mockup-label">Game window (0,0) top-left</span>
+        <div class="roi-box" style="left:6%; top:10%; width:26%; height:9%; border-color:#c0392b;">
+          <span>health_bar</span>
+          <span class="roi-coords">[100,20,300,40]</span>
+        </div>
+        <div class="roi-box" style="left:6%; top:26%; width:26%; height:9%; border-color:#2980b9;">
+          <span>mana_bar</span>
+          <span class="roi-coords">[100,45,300,65]</span>
+        </div>
+        <div class="roi-box" style="left:45%; top:45%; width:40%; height:38%; border-color:#27ae60;">
+          <span>mob_area</span>
+          <span class="roi-coords">[300,100,1200,800]</span>
+        </div>
+      </div>
+      <p class="figure-caption">Figure 2 — each ROI is defined by its top-left corner
+        <code>(x1, y1)</code> and bottom-right corner <code>(x2, y2)</code>; coordinates are raw
+        capture pixels, not percentages.</p>
+
+      <pre><code>roi_positions:
+  health_bar: [100, 20, 300, 40]
+  mana_bar: [100, 45, 300, 65]
+  mob_area: [300, 100, 1200, 800]</code></pre>
+      <div class="callout warn">
+        <strong class="callout-title">Coordinates must fit the frame</strong>
+        Every rectangle needs <code>x2 &gt; x1</code> and <code>y2 &gt; y1</code>, non-negative
+        values, and must fit inside your actual captured frame size — a rectangle sized for a
+        1920×1080 window will be rejected (or silently clipped, depending on caller) against a
+        smaller capture. Re-measure ROIs whenever you change resolution or UI scale.
+      </div>
+    </div>
+
+    <div class="step-block">
+      <h3 id="profile-step-4"><span class="step-badge">4</span>Design the FSM before writing YAML</h3>
+      <p><code>fsm_bindings</code> maps each state name to its own parameter block — the next
+        state to transition to, timeouts, and any state-specific keys or thresholds. Sketch the
+        state cycle first; the fishing profile's loop is the simplest worked example:</p>
+      <div class="diagram">
+        <div class="node">IDLE</div>
+        <span class="arrow">→</span>
+        <div class="node">CASTING</div>
+        <span class="arrow">→</span>
+        <div class="node">WAITING</div>
+        <span class="arrow">→</span>
+        <div class="node">REELING</div>
+        <span class="arrow">→</span>
+        <div class="node">IDLE</div>
+      </div>
+      <p class="figure-caption">Figure 3 — <code>profiles/fishing.yaml</code>'s FSM: cast a line,
+        wait for a tension-indicator detection (or time out back to idle), reel in, repeat.</p>
+      <pre><code>fsm_bindings:
+  IDLE:
+    next: CASTING
+    cast_key: "2"
+    wait_timeout: 10.0
+  CASTING:
+    next: WAITING
+    cast_duration: 0.5
+  WAITING:
+    next: IDLE
+    wait_timeout: 10.0
+    timeout_action: return_to_idle
+    tension_class: tension_indicator
+    tension_confidence_threshold: 0.80
+  REELING:
+    next: IDLE
+    reel_key: "3"</code></pre>
+      <p>Combat profiles follow the same pattern with different states — see
+        <code>profiles/warlord.yaml</code>'s <code>idle → pulling → fighting → looting</code>
+        cycle on the <a href="combat-mode.html#warlord-fsm">Combat Mode</a> page.</p>
+    </div>
+
+    <div class="step-block">
+      <h3 id="profile-step-5"><span class="step-badge">5</span>Bind skills to keys and buff timers</h3>
+      <p><code>skill_key_bindings</code> maps a logical action name (referenced from
+        <code>fsm_bindings</code> and the agent's policy code) to the keyboard key bound to that
+        skill in-game. <code>buff_timer_durations</code> records how long each buff lasts so the
+        agent knows when a re-cast is due:</p>
+      <pre><code>skill_key_bindings:
+  cast: "2"
+  reel: "3"
+buff_timer_durations:
+  haste: 300.0</code></pre>
+    </div>
+
+    <div class="step-block">
+      <h3 id="profile-step-6"><span class="step-badge">6</span>Tune detection confidence and human-like timing</h3>
+      <p><code>confidence_thresholds</code> sets the minimum YOLO detection confidence per class
+        name (plus a <code>default</code> fallback); raise a specific entry if that detector is
+        noisy in your captures. <code>skill_timing</code> gives each skill a Gaussian
+        <code>{mean, std}</code> keystroke delay in seconds so input timing doesn't look
+        robotic; <code>bezier_offset_range</code> does the same for mouse-path curvature:</p>
+      <pre><code>confidence_thresholds:
+  default: 0.6
+  tension_indicator: 0.80
+bezier_offset_range: [15, 30]
+skill_timing:
+  default: {mean: 0.18, std: 0.05}
+  cast: {mean: 0.2, std: 0.08}
+  reel: {mean: 0.15, std: 0.05}</code></pre>
+    </div>
+
+    <div class="step-block">
+      <h3 id="profile-step-7"><span class="step-badge">7</span>Validate before your first run</h3>
+      <p>Two ways to check a profile without launching a full session:</p>
+      <pre><code># Pure YAML/schema validation — no capture, no session
+python3 -c "from lagent.agent.profile import load_profile; load_profile('warlord')"
+
+# Smoke-start the agent process itself (loads and validates, then exits)
+python -m lagent.agent --class warlord --check</code></pre>
+      <div class="callout warn">
+        <strong class="callout-title">Fail-fast, no silent fallback</strong>
+        An invalid or incomplete profile raises a <code>ProfileValidationError</code> (or a
+        Pydantic <code>ValidationError</code>) immediately, before any session begins — there is
+        no runtime fallback to defaults. Fix the reported field and re-run.
+      </div>
+      <p>Validation checks worth knowing while editing:</p>
+      <ul>
+        <li>All seven required top-level fields (below) must be present.</li>
+        <li>Every ROI rectangle must satisfy <code>x2 &gt; x1</code> and <code>y2 &gt; y1</code>, with non-negative coordinates, and must fit inside the actual captured frame's width/height.</li>
+        <li><code>confidence_thresholds</code> values must be between <code>0.0</code> and <code>1.0</code>.</li>
+      </ul>
+    </div>
+
     <p>Required top-level fields (enforced by <code>lagent.agent.profile</code>):</p>
     <table>
-      <thead><tr><th>Field</th><th>Purpose</th></tr></thead>
+      <thead><tr><th>Field</th><th>Purpose</th><th>Step</th></tr></thead>
       <tbody>
-        <tr><td><code>name</code></td><td>Profile identifier (e.g. <code>fishing</code>, <code>warlord</code>, <code>prophet</code>)</td></tr>
-        <tr><td><code>roi_positions</code></td><td>Named regions of interest as <code>[x1, y1, x2, y2]</code> pixel rectangles (HP bar, MP bar, buff icons, etc.)</td></tr>
-        <tr><td><code>fsm_bindings</code></td><td>FSM state transitions, timeouts, and per-state behavior parameters</td></tr>
-        <tr><td><code>skill_key_bindings</code></td><td>Logical action name → keyboard key mapping</td></tr>
-        <tr><td><code>buff_timer_durations</code></td><td>Seconds each buff lasts, used to schedule re-casts</td></tr>
-        <tr><td><code>confidence_thresholds</code></td><td>Per-class YOLO detection confidence cutoffs (plus a <code>default</code>)</td></tr>
-        <tr><td><code>skill_timing</code></td><td>Per-skill Gaussian <code>{mean, std}</code> timing used for human-like keystroke delays</td></tr>
+        <tr><td><code>name</code></td><td>Profile identifier (e.g. <code>fishing</code>, <code>warlord</code>, <code>prophet</code>)</td><td><a href="#profile-step-2">2</a></td></tr>
+        <tr><td><code>roi_positions</code></td><td>Named regions of interest as <code>[x1, y1, x2, y2]</code> pixel rectangles (HP bar, MP bar, buff icons, etc.)</td><td><a href="#profile-step-3">3</a></td></tr>
+        <tr><td><code>fsm_bindings</code></td><td>FSM state transitions, timeouts, and per-state behavior parameters</td><td><a href="#profile-step-4">4</a></td></tr>
+        <tr><td><code>skill_key_bindings</code></td><td>Logical action name → keyboard key mapping</td><td><a href="#profile-step-5">5</a></td></tr>
+        <tr><td><code>buff_timer_durations</code></td><td>Seconds each buff lasts, used to schedule re-casts</td><td><a href="#profile-step-5">5</a></td></tr>
+        <tr><td><code>confidence_thresholds</code></td><td>Per-class YOLO detection confidence cutoffs (plus a <code>default</code>)</td><td><a href="#profile-step-6">6</a></td></tr>
+        <tr><td><code>skill_timing</code></td><td>Per-skill Gaussian <code>{mean, std}</code> timing used for human-like keystroke delays</td><td><a href="#profile-step-6">6</a></td></tr>
       </tbody>
     </table>
 
-    <p>Example — the bundled <code>profiles/fishing.yaml</code>:</p>
+    <p>Full bundled example — <code>profiles/fishing.yaml</code> with every field from the steps
+      above assembled into one file:</p>
     <pre><code>name: fishing
 roi_positions:
   health_bar: [100, 20, 300, 40]
@@ -111,23 +305,18 @@ enable_ocr: true
 enable_recording: false
 fatigue_interval: [1800.0, 3600.0]</code></pre>
 
-    <p>Use <code>profiles/warlord.yaml</code> and <code>profiles/prophet.yaml</code> as the
-      starting points for the combat classes — copy and adjust ROI pixel coordinates to match
-      your own screen resolution and UI layout before first use.</p>
+    <p>Combat classes add a couple of optional blocks on top of the required fields:
+      <code>recovery</code> (death recovery action sequence) and <code>inventory</code>
+      (town-return / deposit / drop rules) — see <code>profiles/warlord.yaml</code> and the
+      <a href="combat-mode.html">Combat Mode</a> page for a worked example. Leave them empty
+      (as in <code>profiles/fishing.yaml</code>) if your class doesn't need them.</p>
 
-    <h2 id="validation">Profile validation (fail-fast)</h2>
-    <div class="callout warn">
-      <strong class="callout-title">No silent fallback</strong>
-      An invalid or incomplete profile raises a <code>ProfileValidationError</code>
-      (or a Pydantic <code>ValidationError</code>) at startup, before any session begins.
-      There is no runtime fallback to defaults — fix the YAML and restart.
+    <div class="callout info">
+      <strong class="callout-title">Mode flags</strong>
+      <code>enable_ocr</code> (default <code>true</code>) and <code>enable_recording</code>
+      (default <code>false</code>) toggle OCR text extraction and the recording hook for this
+      profile.
     </div>
-    <p>Common validation rules worth knowing while editing a profile:</p>
-    <ul>
-      <li>Every ROI rectangle must satisfy <code>x2 &gt; x1</code> and <code>y2 &gt; y1</code>, with non-negative coordinates.</li>
-      <li>ROI rectangles must fit inside the captured frame's actual width/height.</li>
-      <li>All seven required top-level fields listed above must be present.</li>
-    </ul>
 
     <h2 id="sessions-db">Sessions database</h2>
     <p>All processes (agents, orchestrator, UI) append events to a single WAL-mode SQLite

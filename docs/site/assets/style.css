@@ -375,6 +375,88 @@ pre code { background: none; padding: 0; }
   position: absolute; left: 0; color: var(--accent); font-size: 1.05em;
 }
 
+/* Numbered walkthrough steps (e.g. profile creation guide) */
+.step-block {
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--accent);
+  border-radius: 8px;
+  padding: 4px 18px 2px;
+  margin: 1.4em 0;
+  background: var(--bg-elevated);
+}
+.step-block > h3 { margin-top: 0.9em; }
+.step-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.6em; height: 1.6em;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 700;
+  margin-right: 8px;
+}
+
+/* Schematic screen mockup used to illustrate ROI rectangles */
+.screen-mockup {
+  position: relative;
+  width: 100%;
+  max-width: 640px;
+  aspect-ratio: 16 / 9;
+  margin: 1.2em auto 0.4em;
+  background-image:
+    linear-gradient(var(--border) 1px, transparent 1px),
+    linear-gradient(90deg, var(--border) 1px, transparent 1px);
+  background-size: 10% 12.5%;
+  background-color: var(--code-bg);
+  border: 2px solid var(--text-muted);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.screen-mockup .mockup-label {
+  position: absolute;
+  top: 6px; left: 8px;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.roi-box {
+  position: absolute;
+  border: 2px dashed;
+  border-radius: 3px;
+  background: rgba(79, 93, 255, 0.12);
+}
+.roi-box span {
+  position: absolute;
+  top: -1.5em; left: -2px;
+  font-size: 0.68rem;
+  font-family: monospace;
+  background: var(--bg-elevated);
+  color: var(--text);
+  padding: 1px 4px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  white-space: nowrap;
+}
+.roi-box .roi-coords {
+  position: absolute;
+  bottom: -1.4em; left: -2px;
+  top: auto;
+  font-size: 0.62rem;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  padding: 0;
+}
+.figure-caption {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  margin: 0.6em 0 1.4em;
+}
+
 /* Mobile */
 @media (max-width: 1100px) {
   .toc { display: none; }
