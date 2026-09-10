@@ -285,23 +285,30 @@ class TrayIcon:
         )
         start_session_submenu = pystray.MenuItem(
             "Start Session",
-            pystray.Menu(start_fishing, start_combat, start_shadow)
+            pystray.Menu(start_fishing, start_combat, start_shadow),
+            enabled=self.menu.start_session.enabled,
         )
-        
-        # Main menu items with dynamic labels reflecting current toggle states
+
+        # Main menu items with dynamic labels reflecting current toggle states.
+        # `enabled` is passed through so pystray visually greys out items that
+        # our own Menu model has disabled, instead of looking clickable but
+        # silently doing nothing when invoked.
         stop_session = pystray.MenuItem(
             "Stop Session",
-            self._create_callback(lambda: self.menu.stop_session.invoke())
+            self._create_callback(lambda: self.menu.stop_session.invoke()),
+            enabled=self.menu.stop_session.enabled,
         )
         recording_status = "ON" if self.menu.state.recording_mode_active else "OFF"
         recording_toggle = pystray.MenuItem(
             f"Recording Mode: {recording_status}",
-            self._create_callback(lambda: self._invoke_recording_toggle())
+            self._create_callback(lambda: self._invoke_recording_toggle()),
+            enabled=self.menu.recording_mode_toggle.enabled,
         )
         overlay_status = "ON" if self.menu.state.status_overlay_active else "OFF"
         overlay_toggle = pystray.MenuItem(
             f"Status Overlay: {overlay_status}",
-            self._create_callback(lambda: self._invoke_overlay_toggle())
+            self._create_callback(lambda: self._invoke_overlay_toggle()),
+            enabled=self.menu.status_overlay_toggle.enabled,
         )
         exit_item = pystray.MenuItem(
             "Exit",
@@ -365,7 +372,7 @@ class TrayIcon:
     
     def _invoke_overlay_toggle(self) -> None:
         """Toggle overlay mode and refresh menu display."""
-        self.menu.status_overlay_toggle.callback and self.menu.status_overlay_toggle.callback()
+        self.menu.status_overlay_toggle.invoke()
         self._refresh_pystray_menu()
     
     def _refresh_pystray_menu(self) -> None:

@@ -34,6 +34,21 @@ from lagent.ui.overlay import StatusOverlay, QApplication
 from lagent.ui.notifications import NotificationAdapter
 from lagent.ui.state import UIEvent, UIState, reduce_state, SessionState
 
+try:
+    from PyQt6.QtCore import QObject, pyqtSignal
+except ImportError:
+    QObject = None
+    pyqtSignal = None
+
+
+if QObject is not None:
+    class _OverlayToggleSignal(QObject):
+        """Marshals overlay toggle requests from pystray's callback thread
+        onto the Qt main thread (Qt/AppKit widget calls off-thread hang)."""
+        requested = pyqtSignal()
+else:
+    _OverlayToggleSignal = None
+
 
 class UIController:
     """Orchestrates tray icon, menu, and process management."""
@@ -81,6 +96,9 @@ class UIController:
         self.tray = TrayIcon(icon_path=icon_path)
         self._overlay_app = None
         self.overlay = None
+        self._overlay_toggle_signal = _OverlayToggleSignal() if _OverlayToggleSignal else None
+        if self._overlay_toggle_signal is not None:
+            self._overlay_toggle_signal.requested.connect(self._perform_toggle_overlay)
         self._monitor_stop = threading.Event()
         self._monitor_thread = None
         self._exiting = False
@@ -289,15 +307,29 @@ class UIController:
         self._monitor_thread = None
     
     def _on_toggle_overlay(self) -> None:
-        """Handle Status Overlay toggle."""
+        """Handle Status Overlay toggle.
+
+        This callback runs on pystray's own dispatch thread, not the Qt main
+        thread that owns the event loop (see _run_qt_event_loop). Creating or
+        showing QWidgets from the wrong thread hangs the shared macOS AppKit
+        run loop, so the actual work is marshaled onto the Qt thread via a
+        queued signal instead of being performed here directly.
+        """
         logger.info("User toggled Status Overlay")
+        if QApplication is None:
+            logger.warning("PyQt6 is not installed; status overlay unavailable")
+            return
+        if self._overlay_toggle_signal is None:
+            logger.warning("Overlay dispatcher unavailable; status overlay unavailable")
+            return
+        self._overlay_toggle_signal.requested.emit()
+
+    def _perform_toggle_overlay(self) -> None:
+        """Create/show or close the overlay window. Always runs on the Qt main thread."""
         if self.tray.menu.state.status_overlay_active:
             if self.overlay is not None:
                 self.overlay.close()
             self.tray.menu.toggle_status_overlay()
-            return
-        if QApplication is None:
-            logger.warning("PyQt6 is not installed; status overlay unavailable")
             return
         if self._overlay_app is None:
             self._overlay_app = QApplication.instance() or QApplication([])
@@ -328,45 +360,61 @@ class UIController:
         self._exiting = True
 
         logger.info("User selected Exit")
-        self._stop_monitor()
-        
-        # Stop session if running
-        if self.process_manager.current_session:
-            try:
-                self.process_manager.stop_session()
-            except Exception as e:
-                logger.error(f"Error stopping session before exit: {e}")
-        
-        # Close database
         try:
-            self.db.close()
-        except Exception as e:
-            logger.error(f"Error closing database: {e}")
+            self._stop_monitor()
 
-        if self.overlay is not None:
-            self.overlay.close()
-        
-        # Exit tray
-        self.tray.hide()
+            # Stop session if running
+            if self.process_manager.current_session:
+                try:
+                    self.process_manager.stop_session()
+                except Exception as e:
+                    logger.error(f"Error stopping session before exit: {e}")
 
-        # sys.exit() only unwinds the thread it's called from (pystray's
-        # dispatch thread here), so it can't stop the Qt event loop running
-        # on the main thread. Quit the Qt app directly if it exists, and
-        # only fall back to sys.exit() when there is no Qt loop to stop.
-        if self._overlay_app is not None:
-            self._overlay_app.quit()
-        else:
-            sys.exit(0)
+            # Close database
+            try:
+                self.db.close()
+            except Exception as e:
+                logger.error(f"Error closing database: {e}")
 
-        # QApplication.quit() posted from pystray's callback thread is not
-        # guaranteed to wake the main-thread Qt loop on every platform (e.g.
-        # when pystray's detached backend shares the same native run loop on
-        # macOS). If exec() hasn't returned shortly after, all cleanup above
-        # already ran, so force the process down rather than leaving a
-        # zombie UI process with a hidden tray icon.
-        watchdog = threading.Timer(2.0, lambda: os._exit(0))
-        watchdog.daemon = True
-        watchdog.start()
+            if self.overlay is not None:
+                try:
+                    self.overlay.close()
+                except Exception:
+                    logger.exception("Error closing overlay before exit")
+
+            # Exit tray
+            try:
+                self.tray.hide()
+            except Exception:
+                logger.exception("Error hiding tray icon before exit")
+        finally:
+            # Everything above is best-effort cleanup: if any step raises, we
+            # must still stop the event loop and (eventually) the process,
+            # otherwise Exit silently leaves a zombie UI process running with
+            # no visible tray icon and no further action.
+
+            # sys.exit() only unwinds the thread it's called from (pystray's
+            # dispatch thread here), so it can't stop the Qt event loop
+            # running on the main thread. Quit the Qt app directly if it
+            # exists, and only fall back to sys.exit() when there is no Qt
+            # loop to stop.
+            if self._overlay_app is not None:
+                try:
+                    self._overlay_app.quit()
+                except Exception:
+                    logger.exception("Error quitting Qt application")
+            else:
+                sys.exit(0)
+
+            # QApplication.quit() posted from pystray's callback thread is not
+            # guaranteed to wake the main-thread Qt loop on every platform (e.g.
+            # when pystray's detached backend shares the same native run loop on
+            # macOS). If exec() hasn't returned shortly after, all cleanup above
+            # already ran, so force the process down rather than leaving a
+            # zombie UI process with a hidden tray icon.
+            watchdog = threading.Timer(2.0, lambda: os._exit(0))
+            watchdog.daemon = True
+            watchdog.start()
     
     def run(self) -> None:
         """Run the UI (blocking call)."""
