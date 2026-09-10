@@ -10,6 +10,7 @@ Does not import agent/hsl/gpu_server modules (AD-5).
 """
 
 import sys
+import os
 import logging
 import argparse
 import threading
@@ -182,7 +183,7 @@ class UIController:
             logger.info(f"Session {session_id} started successfully")
             
         except Exception as e:
-            logger.error(f"Failed to start session: {e}")
+            logger.error(f"Failed to start session: {e}", exc_info=True)
             self.tray.menu.on_session_stopped()
             self.state = UIState()
             self.tray.update_state(self.state)
@@ -356,6 +357,16 @@ class UIController:
             self._overlay_app.quit()
         else:
             sys.exit(0)
+
+        # QApplication.quit() posted from pystray's callback thread is not
+        # guaranteed to wake the main-thread Qt loop on every platform (e.g.
+        # when pystray's detached backend shares the same native run loop on
+        # macOS). If exec() hasn't returned shortly after, all cleanup above
+        # already ran, so force the process down rather than leaving a
+        # zombie UI process with a hidden tray icon.
+        watchdog = threading.Timer(2.0, lambda: os._exit(0))
+        watchdog.daemon = True
+        watchdog.start()
     
     def run(self) -> None:
         """Run the UI (blocking call)."""

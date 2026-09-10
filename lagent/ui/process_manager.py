@@ -116,6 +116,10 @@ class ProcessManager:
         # Track active session
         self.current_session: Optional[ProcessGroup] = None
         
+        # Child stdout/stderr are redirected to files so buffers never fill and block the child
+        self._child_log_files: Dict[str, Any] = {}
+        self._child_log_paths: Dict[str, Path] = {}
+        
         logger.debug(
             f"ProcessManager initialized: "
             f"startup_timeout={startup_timeout}s, shutdown_timeout={shutdown_timeout}s"
@@ -178,8 +182,8 @@ class ProcessManager:
         try:
             self._launch_child_processes(self.current_session, config, recording_mode=recording_mode)
         except Exception as e:
-            logger.error(f"Failed to launch child processes: {e}")
-            self._rollback_startup(self.current_session)
+            logger.error(f"Failed to launch child processes: {e}", exc_info=True)
+            self._rollback_startup(self.current_session, error=str(e))
             self.current_session = None
             raise RuntimeError(f"Startup failed: {e}") from e
         
@@ -211,7 +215,15 @@ class ProcessManager:
                 # Note: This is a heuristic; ideal solution would use process registration via IPC
                 time.sleep(1.0)
                 if proc.poll() is not None:
-                    raise RuntimeError(f"Process {process_name} exited immediately with code {proc.returncode}")
+                    cmd = self.build_process_command(
+                        process_name, group.session_id, group.profile, recording_mode
+                    )
+                    raise RuntimeError(
+                        f"Process {process_name} exited immediately with code {proc.returncode}\n"
+                        f"  command: {' '.join(cmd)}\n"
+                        f"  cwd: {self.project_root}\n"
+                        f"{self._read_child_output(process_name)}"
+                    )
                 
             except Exception as e:
                 logger.error(f"Failed to launch {process_name}: {e}")
@@ -270,18 +282,70 @@ class ProcessManager:
         
         logger.debug(f"Launching process {process_name}: {' '.join(cmd)}")
         
+        log_file = self._open_child_log(process_name, session_id, cmd)
+        
         # Launch with proper subprocess handling
         proc = subprocess.Popen(
             cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stdout=log_file or subprocess.DEVNULL,
+            stderr=subprocess.STDOUT if log_file else subprocess.DEVNULL,
             cwd=self.project_root,
             # Prevent inheriting file handles to avoid hanging
             close_fds=True,
         )
         
-        logger.info(f"Launched {process_name} with PID {proc.pid}")
+        log_path = self._child_log_paths.get(process_name)
+        logger.info(
+            f"Launched {process_name} with PID {proc.pid}"
+            + (f" (output -> {log_path})" if log_path else "")
+        )
         return proc
+    
+    def _open_child_log(self, process_name: str, session_id: str, cmd: List[str]) -> Optional[Any]:
+        """Open a per-session log file for a child's combined stdout/stderr."""
+        self._close_child_log(process_name)
+        try:
+            log_dir = Path(self.project_root) / "logs" / session_id
+            log_dir.mkdir(parents=True, exist_ok=True)
+            log_path = log_dir / f"{process_name}.log"
+            handle = open(log_path, "w", encoding="utf-8", errors="replace", buffering=1)
+            handle.write(f"# command: {' '.join(cmd)}\n# cwd: {self.project_root}\n")
+            handle.flush()
+        except OSError as e:
+            logger.warning(f"Could not open log file for {process_name}: {e}")
+            return None
+        self._child_log_files[process_name] = handle
+        self._child_log_paths[process_name] = log_path
+        return handle
+    
+    def _close_child_log(self, process_name: str) -> None:
+        handle = self._child_log_files.pop(process_name, None)
+        if handle is not None:
+            try:
+                handle.close()
+            except OSError:
+                pass
+    
+    def _read_child_output(self, process_name: str, max_lines: int = 40) -> str:
+        """Return the tail of a child's log for inclusion in error messages."""
+        log_path = self._child_log_paths.get(process_name)
+        if log_path is None:
+            return "  output: <not captured>"
+        handle = self._child_log_files.get(process_name)
+        if handle is not None:
+            try:
+                handle.flush()
+            except (OSError, ValueError):
+                pass
+        try:
+            lines = log_path.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError as e:
+            return f"  output: <unreadable {log_path}: {e}>"
+        if not lines:
+            return f"  output: <empty> (see {log_path})"
+        tail = lines[-max_lines:]
+        body = "\n".join(f"    {line}" for line in tail)
+        return f"  output ({log_path}):\n{body}"
 
     def restart_recording(self, recording: bool) -> str:
         """Restart only Agent children at a session boundary with recording selected."""
@@ -306,7 +370,7 @@ class ProcessManager:
             raise
         return group.session_id
     
-    def _rollback_startup(self, group: ProcessGroup) -> None:
+    def _rollback_startup(self, group: ProcessGroup, error: Optional[str] = None) -> None:
         """Terminate all started processes and log failure."""
         logger.warning(f"Rolling back startup for session {group.session_id}")
         
@@ -320,6 +384,12 @@ class ProcessManager:
                 except subprocess.TimeoutExpired:
                     proc.kill()
                     logger.debug(f"Force-killed {name}")
+            else:
+                logger.error(
+                    f"Child {name} had already exited with code {proc.returncode}\n"
+                    f"{self._read_child_output(name)}"
+                )
+            self._close_child_log(name)
         
         # Log startup failure event
         if self.sessions_db:
@@ -332,6 +402,10 @@ class ProcessManager:
                         "session_id": group.session_id,
                         "mode": group.mode,
                         "process_count": len(group.processes),
+                        "error": error,
+                        "child_logs": {
+                            name: str(path) for name, path in self._child_log_paths.items()
+                        },
                     }
                 )
             except Exception as e:
@@ -379,6 +453,12 @@ class ProcessManager:
         for name, proc in group.processes.items():
             if name not in group.child_exit_codes:
                 group.child_exit_codes[name] = proc.wait()
+            code = group.child_exit_codes[name]
+            if code not in (0, -9, -15):
+                logger.error(
+                    f"Child {name} exited with code {code}\n{self._read_child_output(name)}"
+                )
+            self._close_child_log(name)
         
         # Mark session ended
         outcome = "clean" if all(code == 0 for code in group.child_exit_codes.values()) else "forced"
