@@ -82,6 +82,7 @@ class UIController:
         self.overlay = None
         self._monitor_stop = threading.Event()
         self._monitor_thread = None
+        self._exiting = False
         
         # Register menu callbacks
         self._setup_menu_callbacks()
@@ -317,6 +318,14 @@ class UIController:
     
     def _on_exit(self) -> None:
         """Handle Exit."""
+        # Guard against re-entrancy: this callback runs on pystray's own
+        # thread and sys.exit() there does not stop the Qt main loop, so a
+        # slow/duplicate click could otherwise run this teardown twice.
+        if self._exiting:
+            logger.debug("Exit already in progress, ignoring duplicate request")
+            return
+        self._exiting = True
+
         logger.info("User selected Exit")
         self._stop_monitor()
         
@@ -338,7 +347,15 @@ class UIController:
         
         # Exit tray
         self.tray.hide()
-        sys.exit(0)
+
+        # sys.exit() only unwinds the thread it's called from (pystray's
+        # dispatch thread here), so it can't stop the Qt event loop running
+        # on the main thread. Quit the Qt app directly if it exists, and
+        # only fall back to sys.exit() when there is no Qt loop to stop.
+        if self._overlay_app is not None:
+            self._overlay_app.quit()
+        else:
+            sys.exit(0)
     
     def run(self) -> None:
         """Run the UI (blocking call)."""

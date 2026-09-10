@@ -12,6 +12,7 @@ Architecture Compliance:
 import sqlite3
 import json
 import logging
+import threading
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -67,9 +68,13 @@ def create_db_bootstrap(db_path: str) -> sqlite3.Connection:
         logger.error(f"Failed to create database directory {db_file.parent}: {e}")
         raise
     
-    # Open connection with appropriate timeout
+    # Open connection with appropriate timeout.
+    # check_same_thread=False: the UI's tray menu callbacks run on pystray's own
+    # thread (detached mode), separate from the thread that creates SessionsDB,
+    # so the connection must be usable across threads. Safety is provided by
+    # SessionsDB's internal lock around each execute/commit call.
     try:
-        conn = sqlite3.connect(db_path, timeout=10.0)
+        conn = sqlite3.connect(db_path, timeout=10.0, check_same_thread=False)
     except sqlite3.DatabaseError as e:
         logger.error(f"Failed to open database {db_path}: {e}")
         raise
@@ -169,12 +174,20 @@ class SessionsDB:
             sqlite3.DatabaseError: If database initialization fails
         """
         self.path = db_path
+        # Guards self.conn: the connection may be used from multiple threads
+        # (e.g. UI tray callbacks run on pystray's own thread).
+        self._lock = threading.Lock()
         try:
             self.conn = create_db_bootstrap(db_path)
             logger.debug(f"SessionsDB initialized: {db_path}")
         except Exception as e:
             logger.error(f"Failed to initialize SessionsDB: {e}")
             raise
+
+    def _check_open(self) -> None:
+        """Raise a clear error if this instance's connection was already closed."""
+        if self.conn is None:
+            raise sqlite3.ProgrammingError(f"SessionsDB is closed: {self.path}")
     
     def log_session_start(
         self,
@@ -198,15 +211,17 @@ class SessionsDB:
         """
         started_at = datetime.now().isoformat()
         
+        self._check_open()
         try:
-            self.conn.execute(
-                """
-                INSERT INTO sessions (session_id, started_at, profile, mode)
-                VALUES (?, ?, ?, ?)
-                """,
-                (session_id, started_at, profile, mode)
-            )
-            self.conn.commit()
+            with self._lock:
+                self.conn.execute(
+                    """
+                    INSERT INTO sessions (session_id, started_at, profile, mode)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    (session_id, started_at, profile, mode)
+                )
+                self.conn.commit()
             logger.debug(f"Session started: {session_id} (profile={profile}, mode={mode})")
             
         except sqlite3.IntegrityError as e:
@@ -218,10 +233,12 @@ class SessionsDB:
     
     def get_session(self, session_id: str) -> Optional[Dict[str, Any]]:
         """Return a single session row as a dictionary."""
-        row = self.conn.execute(
-            "SELECT session_id, started_at, profile, mode, ended_at, created_at FROM sessions WHERE session_id = ?",
-            (session_id,),
-        ).fetchone()
+        self._check_open()
+        with self._lock:
+            row = self.conn.execute(
+                "SELECT session_id, started_at, profile, mode, ended_at, created_at FROM sessions WHERE session_id = ?",
+                (session_id,),
+            ).fetchone()
         if row is None:
             return None
 
@@ -252,16 +269,18 @@ class SessionsDB:
         """
         ended_at = datetime.now().isoformat()
         
+        self._check_open()
         try:
-            self.conn.execute(
-                """
-                UPDATE sessions 
-                SET ended_at = ?
-                WHERE session_id = ?
-                """,
-                (ended_at, session_id)
-            )
-            self.conn.commit()
+            with self._lock:
+                self.conn.execute(
+                    """
+                    UPDATE sessions 
+                    SET ended_at = ?
+                    WHERE session_id = ?
+                    """,
+                    (ended_at, session_id)
+                )
+                self.conn.commit()
             logger.debug(f"Session ended: {session_id} (outcome={outcome})")
             
         except sqlite3.OperationalError as e:
@@ -270,16 +289,18 @@ class SessionsDB:
 
     def update_session_profile(self, session_id: str, profile: str) -> None:
         """Set the resolved profile on an existing session row."""
+        self._check_open()
         try:
-            self.conn.execute(
-                """
-                UPDATE sessions
-                SET profile = ?
-                WHERE session_id = ?
-                """,
-                (profile, session_id)
-            )
-            self.conn.commit()
+            with self._lock:
+                self.conn.execute(
+                    """
+                    UPDATE sessions
+                    SET profile = ?
+                    WHERE session_id = ?
+                    """,
+                    (profile, session_id)
+                )
+                self.conn.commit()
             logger.debug(f"Session profile updated: {session_id} -> {profile}")
 
         except sqlite3.OperationalError as e:
@@ -293,16 +314,18 @@ class SessionsDB:
         limit: int = 100,
     ) -> List[Dict[str, Any]]:
         """Return events for a session filtered by type with parsed payload data."""
-        rows = self.conn.execute(
-            """
-            SELECT id, session_id, ts, source, type, payload_json, created_at
-            FROM events
-            WHERE session_id = ? AND type = ?
-            ORDER BY id ASC
-            LIMIT ?
-            """,
-            (session_id, event_type, limit),
-        ).fetchall()
+        self._check_open()
+        with self._lock:
+            rows = self.conn.execute(
+                """
+                SELECT id, session_id, ts, source, type, payload_json, created_at
+                FROM events
+                WHERE session_id = ? AND type = ?
+                ORDER BY id ASC
+                LIMIT ?
+                """,
+                (session_id, event_type, limit),
+            ).fetchall()
 
         items: List[Dict[str, Any]] = []
         for row in rows:
@@ -322,16 +345,18 @@ class SessionsDB:
 
     def get_all_events(self, session_id: str, limit: int = 1000) -> List[Dict[str, Any]]:
         """Return all events for a session with parsed payload data."""
-        rows = self.conn.execute(
-            """
-            SELECT id, session_id, ts, source, type, payload_json, created_at
-            FROM events
-            WHERE session_id = ?
-            ORDER BY id ASC
-            LIMIT ?
-            """,
-            (session_id, limit),
-        ).fetchall()
+        self._check_open()
+        with self._lock:
+            rows = self.conn.execute(
+                """
+                SELECT id, session_id, ts, source, type, payload_json, created_at
+                FROM events
+                WHERE session_id = ?
+                ORDER BY id ASC
+                LIMIT ?
+                """,
+                (session_id, limit),
+            ).fetchall()
 
         items: List[Dict[str, Any]] = []
         for row in rows:
@@ -378,6 +403,7 @@ class SessionsDB:
         """
         ts = datetime.now().isoformat()
 
+        self._check_open()
         try:
             payload_json = json.dumps(payload, cls=SessionJSONEncoder)
         except (TypeError, ValueError) as e:
@@ -385,14 +411,15 @@ class SessionsDB:
             raise sqlite3.InterfaceError(f"Payload not JSON-serializable: {e}")
 
         try:
-            cursor = self.conn.execute(
-                """
-                INSERT INTO events (session_id, ts, source, type, payload_json)
-                VALUES (?, ?, ?, ?, ?)
-                """,
-                (session_id, ts, source, type, payload_json)
-            )
-            self.conn.commit()
+            with self._lock:
+                cursor = self.conn.execute(
+                    """
+                    INSERT INTO events (session_id, ts, source, type, payload_json)
+                    VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (session_id, ts, source, type, payload_json)
+                )
+                self.conn.commit()
 
             event_id = cursor.lastrowid
             logger.debug(f"Event appended: id={event_id}, session={session_id}, type={type}")
@@ -499,7 +526,8 @@ class SessionsDB:
         """Close the database connection."""
         if self.conn:
             try:
-                self.conn.close()
+                with self._lock:
+                    self.conn.close()
             except Exception as e:
                 logger.error(f"Error closing database connection: {e}")
             finally:
