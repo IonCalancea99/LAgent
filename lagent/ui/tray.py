@@ -184,6 +184,7 @@ class TrayIcon:
         self.menu = Menu()
         self._icon_instance = None
         self._stop_event = None
+        self._detached = False
         self.state = UIState()
         self.icon_state = "idle"
         self._base_tooltip = format_tooltip(self.state)
@@ -390,6 +391,7 @@ class TrayIcon:
         icon = self.get_icon_instance()
         if icon:
             logger.info("Showing tray icon")
+            self._detached = False
             icon.run()
 
     def show_detached(self) -> None:
@@ -397,10 +399,25 @@ class TrayIcon:
         icon = self.get_icon_instance()
         if icon:
             logger.info("Showing tray icon in detached mode")
+            self._detached = True
             icon.run_detached()
     
     def hide(self) -> None:
         """Hide the tray icon."""
-        if self._icon_instance:
-            logger.info("Hiding tray icon")
+        if not self._icon_instance:
+            return
+        logger.info("Hiding tray icon")
+        if self._detached:
+            # In detached mode (e.g. Qt owns the event loop on macOS) pystray
+            # never ran its own run() loop, so Icon.stop() has nothing valid
+            # to stop: on macOS it calls NSApplication.stop_() on the *shared*
+            # NSApplication that Qt also drives, which freezes further Cocoa
+            # event dispatch without ever removing the status item (that
+            # cleanup only happens in run()'s teardown). Just hide the icon
+            # and let the host (Qt) event loop quit on its own.
+            try:
+                self._icon_instance.visible = False
+            except Exception:
+                logger.exception("Failed to hide tray icon in detached mode")
+        else:
             self._icon_instance.stop()

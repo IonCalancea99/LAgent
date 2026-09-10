@@ -188,6 +188,17 @@ class SessionsDB:
         """Raise a clear error if this instance's connection was already closed."""
         if self.conn is None:
             raise sqlite3.ProgrammingError(f"SessionsDB is closed: {self.path}")
+
+    def _check_open_locked(self) -> None:
+        """Same as _check_open, but must be called while holding self._lock.
+
+        Checking outside the lock and then executing is a TOCTOU race: another
+        thread can call close() in between, setting self.conn to None right
+        before the execute() call. This variant re-checks atomically with the
+        execute, right after the lock is acquired.
+        """
+        if self.conn is None:
+            raise sqlite3.ProgrammingError(f"SessionsDB is closed: {self.path}")
     
     def log_session_start(
         self,
@@ -214,6 +225,7 @@ class SessionsDB:
         self._check_open()
         try:
             with self._lock:
+                self._check_open_locked()
                 self.conn.execute(
                     """
                     INSERT INTO sessions (session_id, started_at, profile, mode)
@@ -235,6 +247,7 @@ class SessionsDB:
         """Return a single session row as a dictionary."""
         self._check_open()
         with self._lock:
+            self._check_open_locked()
             row = self.conn.execute(
                 "SELECT session_id, started_at, profile, mode, ended_at, created_at FROM sessions WHERE session_id = ?",
                 (session_id,),
@@ -272,6 +285,7 @@ class SessionsDB:
         self._check_open()
         try:
             with self._lock:
+                self._check_open_locked()
                 self.conn.execute(
                     """
                     UPDATE sessions 
@@ -292,6 +306,7 @@ class SessionsDB:
         self._check_open()
         try:
             with self._lock:
+                self._check_open_locked()
                 self.conn.execute(
                     """
                     UPDATE sessions
@@ -316,6 +331,7 @@ class SessionsDB:
         """Return events for a session filtered by type with parsed payload data."""
         self._check_open()
         with self._lock:
+            self._check_open_locked()
             rows = self.conn.execute(
                 """
                 SELECT id, session_id, ts, source, type, payload_json, created_at
@@ -347,6 +363,7 @@ class SessionsDB:
         """Return all events for a session with parsed payload data."""
         self._check_open()
         with self._lock:
+            self._check_open_locked()
             rows = self.conn.execute(
                 """
                 SELECT id, session_id, ts, source, type, payload_json, created_at
@@ -412,6 +429,7 @@ class SessionsDB:
 
         try:
             with self._lock:
+                self._check_open_locked()
                 cursor = self.conn.execute(
                     """
                     INSERT INTO events (session_id, ts, source, type, payload_json)
@@ -524,10 +542,11 @@ class SessionsDB:
     
     def close(self) -> None:
         """Close the database connection."""
-        if self.conn:
+        with self._lock:
+            if self.conn is None:
+                return
             try:
-                with self._lock:
-                    self.conn.close()
+                self.conn.close()
             except Exception as e:
                 logger.error(f"Error closing database connection: {e}")
             finally:
