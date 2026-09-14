@@ -69,6 +69,15 @@ def test_recording_can_be_selected_before_starting_fishing():
     assert menu.state.recording_mode_active is True
 
 
+def test_recording_can_be_selected_after_a_halted_session():
+    menu = Menu()
+
+    menu.apply_state(UIState(status=SessionState.HALTED, session_id="s"))
+
+    assert menu.recording_mode_toggle.enabled is True
+    assert menu.status_overlay_toggle.enabled is False
+
+
 def test_halt_notifications_are_deduplicated_per_event():
     adapter = NotificationAdapter()
     adapter.notify_halted("session-1", "event-1")

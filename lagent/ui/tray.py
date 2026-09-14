@@ -164,7 +164,7 @@ class Menu:
         active = state.status in {SessionState.STARTING, SessionState.RUNNING, SessionState.RECORDING, SessionState.STOPPING}
         self.start_session.enabled = not active and state.status != SessionState.UNKNOWN
         self.stop_session.enabled = active and state.status != SessionState.STARTING
-        self.recording_mode_toggle.enabled = state.status == SessionState.IDLE or self.stop_session.enabled
+        self.recording_mode_toggle.enabled = state.status in {SessionState.IDLE, SessionState.HALTED} or self.stop_session.enabled
         self.status_overlay_toggle.enabled = self.stop_session.enabled
         if active:
             self.state.recording_mode_active = state.recording
@@ -302,8 +302,9 @@ class TrayIcon:
             enabled=self.menu.stop_session.enabled,
         )
         recording_status = "ON" if self.menu.state.recording_mode_active else "OFF"
+        recording_label = "Recording Mode" if self.menu.stop_session.enabled else "Record Next Session"
         recording_toggle = pystray.MenuItem(
-            f"Recording Mode: {recording_status}",
+            f"{recording_label}: {recording_status}",
             self._create_callback(lambda: self._invoke_recording_toggle()),
             enabled=self.menu.recording_mode_toggle.enabled,
         )
