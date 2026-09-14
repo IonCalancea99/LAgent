@@ -1,7 +1,15 @@
 import logging
+import sys
 import time
 
-from lagent.agent.capture import CaptureThread, Frame, FrameQueue, _load_dxcam_backend, resolve_capture_backend
+from lagent.agent.capture import (
+    CaptureThread,
+    Frame,
+    FrameQueue,
+    _load_dxcam_backend,
+    _resolve_window_region,
+    resolve_capture_backend,
+)
 
 
 class FakeDxcam:
@@ -51,6 +59,33 @@ def test_dxcam_backend_is_bound_to_window_region(monkeypatch):
 
     assert backend.window_region == (1, 2, 101, 202)
     assert fake.regions == [(1, 2, 101, 202)]
+
+
+def test_resolve_window_region_uses_client_bounds_within_screen(monkeypatch):
+    class FakeWin32Gui:
+        @staticmethod
+        def FindWindow(class_name, window_title):
+            assert class_name is None
+            assert window_title == "Asterios"
+            return 1
+
+        @staticmethod
+        def GetWindowRect(handle):
+            raise AssertionError("capture must not use outer window bounds")
+
+        @staticmethod
+        def GetClientRect(handle):
+            assert handle == 1
+            return (0, 0, 1920, 1080)
+
+        @staticmethod
+        def ClientToScreen(handle, point):
+            assert handle == 1
+            return point
+
+    monkeypatch.setitem(sys.modules, "win32gui", FakeWin32Gui)
+
+    assert _resolve_window_region("Asterios") == (0, 0, 1920, 1080)
 
 
 def test_frame_queue_put_and_put_nowait_evict_oldest_without_blocking():

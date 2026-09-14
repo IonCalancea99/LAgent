@@ -95,7 +95,9 @@ def _resolve_window_region(window_title: str) -> tuple[int, int, int, int]:
     if not handle:
         raise RuntimeError(f"window not found: {window_title}")
 
-    left, top, right, bottom = win32gui.GetWindowRect(handle)
+    client_left, client_top, client_right, client_bottom = win32gui.GetClientRect(handle)
+    left, top = win32gui.ClientToScreen(handle, (client_left, client_top))
+    right, bottom = win32gui.ClientToScreen(handle, (client_right, client_bottom))
     if right <= left or bottom <= top:
         raise RuntimeError(f"window has no capture region: {window_title}")
     return left, top, right, bottom
