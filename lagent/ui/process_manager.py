@@ -285,6 +285,12 @@ class ProcessManager:
         log_file = self._open_child_log(process_name, session_id, cmd)
         
         # Launch with proper subprocess handling
+        popen_kwargs: Dict[str, Any] = {}
+        if os.name == "nt":
+            popen_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+        else:
+            popen_kwargs["start_new_session"] = True
+
         proc = subprocess.Popen(
             cmd,
             stdout=log_file or subprocess.DEVNULL,
@@ -292,6 +298,7 @@ class ProcessManager:
             cwd=self.project_root,
             # Prevent inheriting file handles to avoid hanging
             close_fds=True,
+            **popen_kwargs,
         )
         
         log_path = self._child_log_paths.get(process_name)
@@ -435,7 +442,7 @@ class ProcessManager:
         
         # Phase 2: Wait for graceful shutdown
         shutdown_start = time.time()
-        while group.all_running() and (time.time() - shutdown_start) < self.shutdown_timeout:
+        while any(proc.poll() is None for proc in group.processes.values()) and (time.time() - shutdown_start) < self.shutdown_timeout:
             time.sleep(0.1)
         
         # Phase 3: Force-kill remaining
@@ -446,8 +453,11 @@ class ProcessManager:
         if remaining:
             logger.warning(f"Force-killing {len(remaining)} processes after grace period")
             for name, proc in remaining:
-                proc.kill()
-                group.child_exit_codes[name] = -9
+                try:
+                    self._kill_process_group(proc)
+                except ProcessLookupError:
+                    logger.debug(f"Process {name} already exited before force-kill")
+                group.child_exit_codes[name] = proc.wait()
         
         # Collect exit codes
         for name, proc in group.processes.items():
@@ -492,16 +502,27 @@ class ProcessManager:
         for name, proc in group.processes.items():
             if proc.poll() is None:
                 try:
-                    # Use proc.terminate() on all platforms (works better than CTRL_C_EVENT)
-                    # CTRL_C_EVENT requires console group, which may not be available for
-                    # detached subprocesses. terminate() sends WM_CLOSE on Windows, SIGTERM on Unix.
-                    proc.terminate()
+                    self._terminate_process_group(proc)
                     logger.debug(f"Sent termination signal to {name} (PID {proc.pid})")
                 except ProcessLookupError:
                     # Process already exited
                     logger.debug(f"Process {name} already exited")
                 except Exception as e:
                     logger.error(f"Failed to send termination signal to {name}: {e}")
+
+    def _terminate_process_group(self, proc: subprocess.Popen) -> None:
+        """Terminate a child and any descendants in its process group when supported."""
+        if os.name != "nt" and isinstance(proc.pid, int):
+            os.killpg(proc.pid, signal.SIGTERM)
+            return
+        proc.terminate()
+
+    def _kill_process_group(self, proc: subprocess.Popen) -> None:
+        """Force-kill a child and any descendants in its process group when supported."""
+        if os.name != "nt" and isinstance(proc.pid, int):
+            os.killpg(proc.pid, signal.SIGKILL)
+            return
+        proc.kill()
     
     def get_session_status(self) -> Optional[Dict[str, Any]]:
         """Get status of current session."""

@@ -18,6 +18,8 @@ Tests cover:
 import pytest
 import tempfile
 import subprocess
+import sys
+import os
 import json
 import sqlite3
 from pathlib import Path
@@ -369,6 +371,28 @@ class TestProcessShutdown:
             assert 'ended_at' in columns, "ended_at column must exist in sessions table"
             
             db.close()
+
+    def test_stop_session_force_kills_and_reaps_stubborn_python_child(self):
+        """Test that stop_session kills and waits for a child that ignores SIGTERM."""
+        from lagent.ui.process_manager import ProcessManager, ProcessGroup
+
+        command = [
+            sys.executable,
+            "-c",
+            "import signal, time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(30)",
+        ]
+        popen_kwargs = {"start_new_session": True} if os.name != "nt" else {}
+        proc = subprocess.Popen(command, **popen_kwargs)
+        manager = ProcessManager(shutdown_timeout=0.1)
+        group = ProcessGroup(session_id="stubborn-session", mode="fishing", profile="fishing")
+        group.add_process("stubborn_agent", proc)
+        manager.current_session = group
+
+        manager.stop_session()
+
+        assert proc.poll() is not None
+        assert proc.returncode is not None
+        assert manager.current_session is None
 
 
 # ============================================================================
