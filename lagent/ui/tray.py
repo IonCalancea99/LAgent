@@ -90,7 +90,7 @@ class Menu:
         # Menu items
         self.start_session = SessionStartItem()
         self.stop_session = MenuItem("Stop Session", enabled=False)
-        self.recording_mode_toggle = MenuItem("Recording Mode: OFF", enabled=False)
+        self.recording_mode_toggle = MenuItem("Record Next Session: OFF", enabled=True)
         self.status_overlay_toggle = MenuItem("Status Overlay: OFF", enabled=False)
         self.exit = MenuItem("Exit")
         
@@ -117,6 +117,7 @@ class Menu:
         # Disable Start, keep Stop disabled until processes register
         self.start_session.enabled = False
         self.stop_session.enabled = False
+        self.recording_mode_toggle.enabled = False
         
         logger.debug("Menu: session starting, Start disabled, Stop disabled")
     
@@ -136,10 +137,10 @@ class Menu:
         self._session_running = False
         self._processes_registered = False
         
-        # Re-enable Start, disable Stop
+        # Re-enable Start and allow recording to be selected for the next session.
         self.start_session.enabled = True
         self.stop_session.enabled = False
-        self.recording_mode_toggle.enabled = False
+        self.recording_mode_toggle.enabled = True
         self.status_overlay_toggle.enabled = False
         
         logger.debug("Menu: session stopped, Start enabled, Stop disabled")
@@ -163,11 +164,13 @@ class Menu:
         active = state.status in {SessionState.STARTING, SessionState.RUNNING, SessionState.RECORDING, SessionState.STOPPING}
         self.start_session.enabled = not active and state.status != SessionState.UNKNOWN
         self.stop_session.enabled = active and state.status != SessionState.STARTING
-        self.recording_mode_toggle.enabled = self.stop_session.enabled
+        self.recording_mode_toggle.enabled = state.status == SessionState.IDLE or self.stop_session.enabled
         self.status_overlay_toggle.enabled = self.stop_session.enabled
-        self.state.recording_mode_active = state.recording
-        status = "ON" if state.recording else "OFF"
-        self.recording_mode_toggle.label = f"Recording Mode: {status}"
+        if active:
+            self.state.recording_mode_active = state.recording
+        status = "ON" if self.state.recording_mode_active else "OFF"
+        label = "Recording Mode" if active else "Record Next Session"
+        self.recording_mode_toggle.label = f"{label}: {status}"
 
 
 class TrayIcon:

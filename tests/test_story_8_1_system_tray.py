@@ -108,7 +108,7 @@ class TestTrayMenuInitialization:
         
         assert state.start_session_enabled is True
         assert state.stop_session_enabled is False
-        assert state.recording_mode_enabled is False
+        assert state.recording_mode_enabled is True
         assert state.status_overlay_enabled is False
 
     def test_tray_icon_does_not_import_agent_modules(self):
@@ -289,6 +289,7 @@ class TestMenuStateTransitions:
         
         assert state.start_session_enabled is True
         assert state.stop_session_enabled is False
+        assert state.recording_mode_enabled is True
 
 
 # ============================================================================

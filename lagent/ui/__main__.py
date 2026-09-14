@@ -251,10 +251,13 @@ class UIController:
                 logger.error("Recording restart failed: %s", exc)
                 return
         self.tray.menu.state.recording_mode_active = requested
-        self.tray.menu.recording_mode_toggle.label = f"Recording Mode: {'ON' if requested else 'OFF'}"
+        label = "Recording Mode" if session is not None else "Record Next Session"
+        self.tray.menu.recording_mode_toggle.label = f"{label}: {'ON' if requested else 'OFF'}"
         if session is not None:
             self.state = reduce_state(self.state, UIEvent("recording_started" if requested else "recording_stopped", session.session_id))
-        self.tray.update_state(self.state)
+            self.tray.update_state(self.state)
+        else:
+            self.tray._refresh_pystray_menu()
 
     def handle_session_event(self, event: UIEvent) -> None:
         """Apply an orchestrator/child event without blocking the tray callback."""

@@ -8,6 +8,7 @@ import pytest
 from lagent.ui.notifications import NotificationAdapter
 from lagent.ui.process_manager import ProcessManager, ProcessGroup
 from lagent.ui.state import SessionState, UIEvent, UIState, reduce_state, format_tooltip
+from lagent.ui.tray import Menu
 
 
 def test_reducer_projects_lifecycle_and_ignores_duplicate_or_stale_events():
@@ -51,6 +52,21 @@ def test_recording_flag_is_added_only_to_agent_launches():
     assert "--record" in agent
     assert "--record" not in gpu
     assert gpu[-2:] == ["--session-id", "s"]
+
+
+def test_recording_can_be_selected_before_starting_fishing():
+    menu = Menu()
+
+    menu.toggle_recording_mode()
+
+    assert menu.recording_mode_toggle.enabled is True
+    assert menu.state.recording_mode_active is True
+    assert menu.start_session.modes["Fishing"].value == "fishing"
+
+    menu.on_session_starting()
+
+    assert menu.recording_mode_toggle.enabled is False
+    assert menu.state.recording_mode_active is True
 
 
 def test_halt_notifications_are_deduplicated_per_event():
