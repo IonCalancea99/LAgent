@@ -104,13 +104,27 @@ def extract_roi_map(frame: Any, profile: AgentProfile | Any, *, width: int | Non
 
     extracted: dict[str, Any] = {}
     for name, (x1, y1, x2, y2) in validated.items():
-        if hasattr(frame, "__getitem__") and hasattr(frame, "shape"):
-            extracted[name] = frame[y1:y2, x1:x2]
-            continue
-
-        extracted[name] = [row[x1:x2] for row in frame[y1:y2]]
+        extracted[name] = _extract_region(frame, x1, y1, x2, y2)
 
     return extracted
+
+
+def _extract_region(frame: Any, x1: int, y1: int, x2: int, y2: int) -> Any:
+    """Crop a rectangular region from an image-like frame payload."""
+    if hasattr(frame, "__getitem__") and hasattr(frame, "shape"):
+        return frame[y1:y2, x1:x2]
+
+    if hasattr(frame, "rgb") and hasattr(frame, "size"):
+        # mss.ScreenShot is not subscriptable; crop via its RGB buffer through PIL instead.
+        from PIL import Image
+
+        image = Image.frombytes("RGB", frame.size, frame.rgb)
+        return image.crop((x1, y1, x2, y2))
+
+    if isinstance(frame, (list, tuple)):
+        return [row[x1:x2] for row in frame[y1:y2]]
+
+    raise ProfileValidationError(f"unsupported frame type for ROI extraction: {type(frame).__name__}")
 
 
 def load_profile(
