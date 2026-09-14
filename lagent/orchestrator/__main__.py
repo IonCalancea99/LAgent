@@ -47,12 +47,13 @@ def main():
         # Create orchestrator session
         session_id = args.session_id or f"orchestrator-{uuid.uuid4().hex[:8]}"
         
-        # Log orchestrator session start
-        db.log_session_start(
-            session_id=session_id,
-            profile="orchestrator",
-            mode="autonomous"
-        )
+        # Log orchestrator session start (the UI's process manager may have already created this row)
+        if db.get_session(session_id) is None:
+            db.log_session_start(
+                session_id=session_id,
+                profile="orchestrator",
+                mode="autonomous"
+            )
         logger.info("Orchestrator session started: %s", session_id)
         
         # Log startup event

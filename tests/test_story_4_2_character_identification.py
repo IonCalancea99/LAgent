@@ -119,6 +119,9 @@ def test_main_passes_session_context_to_profile_resolver(monkeypatch):
         def __init__(self, *_args, **_kwargs):
             self.events = []
 
+        def get_session(self, *_args, **_kwargs):
+            return None
+
         def log_session_start(self, **_kwargs):
             return None
 

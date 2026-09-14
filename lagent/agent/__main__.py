@@ -148,11 +148,13 @@ def main() -> None:
         session_id = args.session_id or f"agent-{args.profile_class or 'auto'}-{uuid.uuid4().hex[:8]}"
 
         # Session row must exist before any event is appended (events.session_id is a foreign key).
-        db.log_session_start(
-            session_id=session_id,
-            profile=args.profile_class or "pending",
-            mode=session_mode,
-        )
+        # The UI's process manager may have already created this row for us; only insert if missing.
+        if db.get_session(session_id) is None:
+            db.log_session_start(
+                session_id=session_id,
+                profile=args.profile_class or "pending",
+                mode=session_mode,
+            )
         logger.info("Session started: %s", session_id)
 
         resolver = StartupProfileResolver()
