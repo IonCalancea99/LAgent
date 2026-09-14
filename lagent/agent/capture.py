@@ -32,18 +32,24 @@ class Frame:
 
     @property
     def width(self) -> int:
-        """Image width in pixels when the frame payload exposes array dimensions."""
+        """Image width in pixels when the frame payload exposes array or mss.ScreenShot dimensions."""
         shape = getattr(self.frame, "shape", None)
         if shape is not None and len(shape) >= 2:
             return int(shape[1])
+        size = getattr(self.frame, "size", None)
+        if size is not None and len(size) >= 2:
+            return int(size[0])
         return 0
 
     @property
     def height(self) -> int:
-        """Image height in pixels when the frame payload exposes array dimensions."""
+        """Image height in pixels when the frame payload exposes array or mss.ScreenShot dimensions."""
         shape = getattr(self.frame, "shape", None)
         if shape is not None and len(shape) >= 2:
             return int(shape[0])
+        size = getattr(self.frame, "size", None)
+        if size is not None and len(size) >= 2:
+            return int(size[1])
         return 0
 
 
