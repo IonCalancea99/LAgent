@@ -186,15 +186,23 @@ class CaptureThread(threading.Thread):
         self.on_frame = on_frame
         self.frame_queue: FrameQueue = FrameQueue(maxsize=max_queue_size)
         self._stop_event = threading.Event()
-        self.backend_name, self.backend = resolve_capture_backend(window_title, fps, self.logger)
-        self._mss_monitor = (
-            _mss_monitor_for_window(window_title) if self.backend_name == "mss" else None
-        )
+        self.backend_name: str | None = None
+        self.backend: Any = None
+        self._mss_monitor: dict[str, int] | None = None
 
     def stop(self) -> None:
         self._stop_event.set()
 
+    def _ensure_backend(self) -> None:
+        # dxcam/mss hold thread-local OS handles, so create them on the thread that grabs frames.
+        if self.backend is not None:
+            return
+        self.backend_name, self.backend = resolve_capture_backend(self.window_title, self.fps, self.logger)
+        if self.backend_name == "mss":
+            self._mss_monitor = _mss_monitor_for_window(self.window_title)
+
     def _capture_once(self) -> Frame | None:
+        self._ensure_backend()
         timestamp = time.time()
         captured_at_ms = int(time.time_ns() / 1_000_000)
 
