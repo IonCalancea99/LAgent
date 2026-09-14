@@ -102,9 +102,8 @@ class InferenceClient(threading.Thread):
         self.agent_id = agent_id
         self.frame_queue = frame_queue
         self.policy_queue = policy_queue
-        self.transport = transport or AgentTransport(agent_id, endpoint=endpoint) if endpoint else transport
-        if self.transport is None:
-            self.transport = AgentTransport(agent_id)
+        resolved_transport = transport or AgentTransport(agent_id, endpoint=endpoint) if endpoint else transport
+        self.transport: Any = resolved_transport or AgentTransport(agent_id)
         self.profile = profile
         self.timeout = timeout
         self.debug = debug
@@ -116,10 +115,21 @@ class InferenceClient(threading.Thread):
 
     def _roi_map(self, frame: Frame) -> dict[str, Any]:
         if frame.roi_map is not None:
-            return frame.roi_map
+            return {
+                name: frame_to_bytes(region)
+                for name, region in frame.roi_map.items()
+            }
         if self.profile is None:
             return {}
-        return extract_roi_map(frame.frame, self.profile, width=frame.width, height=frame.height)
+        return {
+            name: frame_to_bytes(region)
+            for name, region in extract_roi_map(
+                frame.frame,
+                self.profile,
+                width=frame.width,
+                height=frame.height,
+            ).items()
+        }
 
     def process_once(self) -> bool:
         """Process one available frame; return whether a result was published."""

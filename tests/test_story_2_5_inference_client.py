@@ -1,8 +1,10 @@
 import logging
 import time
 
+import pytest
+
 from lagent.agent.capture import Frame, FrameQueue
-from lagent.agent.inference import InferenceClient, PolicyQueue
+from lagent.agent.inference import InferenceClient, PolicyQueue, frame_to_bytes
 from lagent.common import Detection, PerceptionResult
 from lagent.common.transport import InferenceResponse
 
@@ -63,6 +65,26 @@ def test_inference_client_pushes_result_and_logs_debug_details(caplog):
     assert "mob" in caplog.text
     assert "95%" in caplog.text
     assert "latency_ms" in caplog.text
+
+
+def test_inference_client_encodes_extracted_numpy_roi_crops():
+    numpy = pytest.importorskip("numpy")
+    pytest.importorskip("PIL")
+
+    frame = numpy.zeros((4, 4, 3), dtype=numpy.uint8)
+    result = PerceptionResult()
+    transport = FakeTransport(InferenceResponse("warlord", result, 1.0))
+    frames = FrameQueue(maxsize=2)
+    frames.put(_frame(frame))
+    policy_queue = PolicyQueue(maxsize=2)
+    profile = {"hp": (0, 0, 2, 2)}
+    client = InferenceClient("warlord", frames, policy_queue, transport=transport, profile=profile)
+
+    assert client.process_once() is True
+
+    frame_bytes, roi_map, _ = transport.requests[0]
+    assert frame_bytes == frame_to_bytes(frame)
+    assert isinstance(roi_map["hp"], bytes)
 
 
 def test_inference_client_drops_timed_out_frame_and_logs_warning(caplog):
