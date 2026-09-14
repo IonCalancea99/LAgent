@@ -68,6 +68,9 @@ def frame_to_bytes(frame: Any) -> bytes:
 
         if isinstance(frame, Image.Image):
             image = frame
+        elif hasattr(frame, "rgb") and hasattr(frame, "size"):
+            # mss.ScreenShot has no .shape/array interface; use its rgb buffer directly.
+            image = Image.frombytes("RGB", frame.size, frame.rgb)
         elif hasattr(frame, "shape"):
             image = Image.fromarray(frame)
         else:

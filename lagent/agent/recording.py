@@ -24,7 +24,13 @@ def _frame_bytes(frame: Any) -> bytes:
     try:
         from PIL import Image
 
-        image = frame if isinstance(frame, Image.Image) else Image.fromarray(frame)
+        if isinstance(frame, Image.Image):
+            image = frame
+        elif hasattr(frame, "rgb") and hasattr(frame, "size"):
+            # mss.ScreenShot has no .shape/array interface; use its rgb buffer directly.
+            image = Image.frombytes("RGB", frame.size, frame.rgb)
+        else:
+            image = Image.fromarray(frame)
         from io import BytesIO
 
         output = BytesIO()
