@@ -53,12 +53,51 @@ def test_dxcam_backend_is_bound_to_window_region(monkeypatch):
 
     monkeypatch.setitem(__import__("sys").modules, "dxcam", fake_module)
     monkeypatch.setattr("lagent.agent.capture._resolve_window_region", lambda title: (1, 2, 101, 202))
+    monkeypatch.setattr("lagent.agent.capture._validate_dxcam_region", lambda region: None)
 
     backend = _load_dxcam_backend("Lineage II", fps=10)
     backend.grab(region=backend.window_region)
 
     assert backend.window_region == (1, 2, 101, 202)
     assert fake.regions == [(1, 2, 101, 202)]
+
+
+def test_dxcam_backend_falls_back_when_window_exceeds_primary_output(monkeypatch):
+    fake_module = type("DxcamModule", (), {"create": staticmethod(FakeDxcam)})
+    fake_mss = FakeMss()
+
+    monkeypatch.setitem(sys.modules, "dxcam", fake_module)
+    monkeypatch.setattr("lagent.agent.capture._resolve_window_region", lambda title: (8, 31, 1928, 1111))
+    monkeypatch.setattr(
+        "lagent.agent.capture._validate_dxcam_region",
+        lambda region: (_ for _ in ()).throw(RuntimeError("region exceeds output")),
+    )
+    monkeypatch.setattr("lagent.agent.capture._load_mss_backend", lambda: fake_mss)
+
+    backend_name, backend = resolve_capture_backend("Asterios", fps=10)
+
+    assert backend_name == "mss"
+    assert backend is fake_mss
+
+
+def test_capture_thread_uses_client_region_with_mss(monkeypatch):
+    fake_mss = FakeMss()
+
+    monkeypatch.setattr(
+        "lagent.agent.capture.resolve_capture_backend",
+        lambda window_title, fps, log: ("mss", fake_mss),
+    )
+    monkeypatch.setattr(
+        "lagent.agent.capture._mss_monitor_for_window",
+        lambda title: {"left": 8, "top": 31, "width": 1920, "height": 1080},
+    )
+
+    thread = CaptureThread(window_title="Asterios")
+    frame = thread._capture_once()
+
+    assert frame is not None
+    assert fake_mss.calls == 1
+    assert frame.frame["region"] == {"left": 8, "top": 31, "width": 1920, "height": 1080}
 
 
 def test_resolve_window_region_uses_client_bounds_within_screen(monkeypatch):

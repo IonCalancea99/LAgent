@@ -103,6 +103,30 @@ def _resolve_window_region(window_title: str) -> tuple[int, int, int, int]:
     return left, top, right, bottom
 
 
+def _validate_dxcam_region(region: tuple[int, int, int, int]) -> None:
+    """Ensure the window region fits dxcam's default primary output."""
+
+    try:
+        import win32api  # type: ignore
+    except ImportError as exc:  # pragma: no cover - platform dependency
+        raise RuntimeError("dxcam region validation requires Windows") from exc
+
+    screen_width = win32api.GetSystemMetrics(0)
+    screen_height = win32api.GetSystemMetrics(1)
+    left, top, right, bottom = region
+    if left < 0 or top < 0 or right > screen_width or bottom > screen_height:
+        raise RuntimeError(
+            f"window region {region} exceeds dxcam output {screen_width}x{screen_height}"
+        )
+
+
+def _mss_monitor_for_window(window_title: str) -> dict[str, int]:
+    """Translate absolute client bounds to the monitor mapping required by mss."""
+
+    left, top, right, bottom = _resolve_window_region(window_title)
+    return {"left": left, "top": top, "width": right - left, "height": bottom - top}
+
+
 def _load_dxcam_backend(window_title: str, fps: int) -> Any:
     """Create the preferred dxcam backend for a particular window."""
 
@@ -114,7 +138,9 @@ def _load_dxcam_backend(window_title: str, fps: int) -> Any:
     backend = dxcam.create()
     if backend is None:
         raise RuntimeError("dxcam backend creation failed")
-    backend.window_region = _resolve_window_region(window_title)
+    region = _resolve_window_region(window_title)
+    _validate_dxcam_region(region)
+    backend.window_region = region
     backend.capture_fps = fps
     return backend
 
@@ -161,6 +187,9 @@ class CaptureThread(threading.Thread):
         self.frame_queue: FrameQueue = FrameQueue(maxsize=max_queue_size)
         self._stop_event = threading.Event()
         self.backend_name, self.backend = resolve_capture_backend(window_title, fps, self.logger)
+        self._mss_monitor = (
+            _mss_monitor_for_window(window_title) if self.backend_name == "mss" else None
+        )
 
     def stop(self) -> None:
         self._stop_event.set()
@@ -174,7 +203,7 @@ class CaptureThread(threading.Thread):
                 region = getattr(self.backend, "window_region", None)
                 raw_frame = self.backend.grab(region=region) if hasattr(self.backend, "grab") else self.backend
             else:
-                raw_frame = self.backend.grab({"title": self.window_title})
+                raw_frame = self.backend.grab(self._mss_monitor)
         except Exception as exc:  # noqa: BLE001 - capture failures are logged and retry later.
             self.logger.warning("capture failed for %s: %s", self.window_title, exc)
             return None
