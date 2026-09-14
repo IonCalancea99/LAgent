@@ -15,6 +15,7 @@ from lagent.common import PerceptionResult
 from lagent.common.transport import AgentTransport, InferenceResponse
 
 logger = logging.getLogger(__name__)
+DEFAULT_INFERENCE_TIMEOUT_SECONDS = 1.0
 
 
 class PolicyQueue(queue.Queue):
@@ -94,7 +95,7 @@ class InferenceClient(threading.Thread):
         endpoint: str | None = None,
         transport: AgentTransport | Any | None = None,
         profile: Any | None = None,
-        timeout: float = 0.05,
+        timeout: float = DEFAULT_INFERENCE_TIMEOUT_SECONDS,
         debug: bool = False,
         log: logging.Logger | None = None,
     ) -> None:
@@ -109,6 +110,8 @@ class InferenceClient(threading.Thread):
         self.debug = debug
         self.logger = log or logger
         self._stop_event = threading.Event()
+        self._consecutive_timeouts = 0
+        self._last_timeout_warning = 0.0
 
     def stop(self) -> None:
         self._stop_event.set()
@@ -170,15 +173,32 @@ class InferenceClient(threading.Thread):
                     response.latency_ms,
                     push_latency_ms,
                 )
+            self._consecutive_timeouts = 0
             return True
         except TimeoutError as exc:
-            self.logger.warning("inference request timed out; dropping frame: %s", exc)
+            self._log_timeout(exc)
             return False
         except (TypeError, ValueError, OSError) as exc:
             self.logger.warning("inference frame dropped: %s", exc)
             return False
         finally:
             self.frame_queue.task_done()
+
+    def _log_timeout(self, exc: TimeoutError) -> None:
+        self._consecutive_timeouts += 1
+        now = time.monotonic()
+        if self._consecutive_timeouts == 1 or now - self._last_timeout_warning >= 30.0:
+            endpoint = getattr(self.transport, "endpoint", "<unknown>")
+            self.logger.warning(
+                "inference request timed out; GPU server did not respond at %s; "
+                "start LAgent through .venv/bin/python -m lagent.ui so the GPU server is launched; "
+                "dropping frame: %s",
+                endpoint,
+                exc,
+            )
+            self._last_timeout_warning = now
+        elif self.debug:
+            self.logger.debug("inference request timed out; dropping frame: %s", exc)
 
     def run(self) -> None:
         self.transport.connect()
@@ -190,4 +210,4 @@ class InferenceClient(threading.Thread):
             self.transport.close()
 
 
-__all__ = ["InferenceClient", "PolicyQueue", "frame_to_bytes"]
+__all__ = ["DEFAULT_INFERENCE_TIMEOUT_SECONDS", "InferenceClient", "PolicyQueue", "frame_to_bytes"]

@@ -4,7 +4,12 @@ import time
 import pytest
 
 from lagent.agent.capture import Frame, FrameQueue
-from lagent.agent.inference import InferenceClient, PolicyQueue, frame_to_bytes
+from lagent.agent.inference import (
+    DEFAULT_INFERENCE_TIMEOUT_SECONDS,
+    InferenceClient,
+    PolicyQueue,
+    frame_to_bytes,
+)
 from lagent.common import Detection, PerceptionResult
 from lagent.common.transport import InferenceResponse
 
@@ -61,6 +66,7 @@ def test_inference_client_pushes_result_and_logs_debug_details(caplog):
 
     assert policy_queue.get_nowait() == result
     assert transport.connected is False
+    assert transport.requests[0][2] == DEFAULT_INFERENCE_TIMEOUT_SECONDS
     assert "PerceptionResult" in caplog.text
     assert "mob" in caplog.text
     assert "95%" in caplog.text

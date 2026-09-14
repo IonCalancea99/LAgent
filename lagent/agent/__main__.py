@@ -10,7 +10,11 @@ from typing import Any
 
 from lagent.common import GameState, PerceptionResult
 from lagent.agent.capture import CaptureThread
-from lagent.agent.inference import InferenceClient, PolicyQueue
+from lagent.agent.inference import (
+    DEFAULT_INFERENCE_TIMEOUT_SECONDS,
+    InferenceClient,
+    PolicyQueue,
+)
 from lagent.agent.loop import AgentLoop
 from lagent.agent.recording import PynputInputListener, RecordingSession
 from lagent.agent.fishing_fsm import FishingFSM
@@ -92,6 +96,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--window-title", default="Lineage II", help="Game window title to capture")
     parser.add_argument("--gpu-endpoint", default=GPU_ENDPOINT, help="GPU inference server endpoint")
     parser.add_argument("--fps", type=int, default=10, help="Capture and inference rate")
+    parser.add_argument(
+        "--inference-timeout",
+        type=float,
+        default=DEFAULT_INFERENCE_TIMEOUT_SECONDS,
+        help="Seconds to wait for each GPU inference response",
+    )
     parser.add_argument(
         "--check",
         action="store_true",
@@ -207,6 +217,7 @@ def main() -> None:
                 policy_queue,
                 endpoint=args.gpu_endpoint,
                 profile=profile,
+                timeout=args.inference_timeout,
                 debug=True,
             )
             state_handler = build_state_handler(
