@@ -448,6 +448,24 @@ class TestIntegration:
         assert main is not None
         assert callable(main)
 
+    def test_exit_starts_watchdog_before_hiding_tray(self):
+        """Test that a blocking tray hide cannot prevent hard process exit."""
+        from lagent.ui.__main__ import UIController
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "sessions.db"
+            controller = UIController(db_path=str(db_path))
+            calls = []
+            controller._start_exit_watchdog = Mock(side_effect=lambda: calls.append("watchdog"))
+            controller.tray.hide = Mock(side_effect=lambda: calls.append("hide"))
+            controller._overlay_app = Mock()
+            controller._overlay_app.quit = Mock(side_effect=lambda: calls.append("quit"))
+
+            controller._on_exit()
+
+            assert calls[:2] == ["watchdog", "hide"]
+            assert calls[-1] == "quit"
+
     def test_no_agent_imports_in_ui_package(self):
         """Test that ui package doesn't import agent/hsl/gpu_server."""
         import sys

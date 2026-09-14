@@ -385,6 +385,11 @@ class UIController:
                 except Exception:
                     logger.exception("Error closing overlay before exit")
 
+            # The final tray hide can block inside the native macOS status-item
+            # backend. Start the hard-exit guard before hiding it so the parent
+            # terminal is not left attached to an invisible UI process.
+            self._start_exit_watchdog()
+
             # Exit tray
             try:
                 self.tray.hide()
@@ -409,15 +414,17 @@ class UIController:
             else:
                 sys.exit(0)
 
-            # QApplication.quit() posted from pystray's callback thread is not
-            # guaranteed to wake the main-thread Qt loop on every platform (e.g.
-            # when pystray's detached backend shares the same native run loop on
-            # macOS). If exec() hasn't returned shortly after, all cleanup above
-            # already ran, so force the process down rather than leaving a
-            # zombie UI process with a hidden tray icon.
-            watchdog = threading.Timer(2.0, lambda: os._exit(0))
-            watchdog.daemon = True
-            watchdog.start()
+
+    def _start_exit_watchdog(self) -> None:
+        # QApplication.quit() posted from pystray's callback thread is not
+        # guaranteed to wake the main-thread Qt loop on every platform (e.g.
+        # when pystray's detached backend shares the same native run loop on
+        # macOS). If exec() hasn't returned shortly after, all cleanup above
+        # already ran, so force the process down rather than leaving a zombie UI
+        # process with a hidden tray icon.
+        watchdog = threading.Timer(2.0, lambda: os._exit(0))
+        watchdog.daemon = True
+        watchdog.start()
     
     def run(self) -> None:
         """Run the UI (blocking call)."""
