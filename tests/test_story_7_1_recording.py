@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from lagent.agent.__main__ import build_parser
-from lagent.agent.capture import Frame
+from lagent.agent.capture import CaptureThread, Frame
 from lagent.agent.recording import RecordingSession
 from lagent.common.sessions_db import SessionsDB
 
@@ -106,3 +106,37 @@ def test_recording_serializes_concurrent_input_and_frame_updates(tmp_path: Path)
 
     assert errors == []
     assert recording.frame_count == 20
+
+
+def test_recording_capture_thread_recovers_from_window_resolution_failure(tmp_path: Path, monkeypatch):
+    class FakeMss:
+        def __init__(self):
+            self.calls = 0
+            self.monitors = [{"left": 0, "top": 0, "width": 800, "height": 600}]
+
+        def grab(self, region):
+            self.calls += 1
+            return b"fake-frame-bytes"
+
+    fake_mss = FakeMss()
+    monkeypatch.setattr("lagent.agent.capture.resolve_capture_backend", lambda title, fps, log: ("mss", fake_mss))
+    def failing_monitor_resolution(title):
+        raise RuntimeError(f"window not found: {title}")
+    monkeypatch.setattr("lagent.agent.capture._mss_monitor_for_window", failing_monitor_resolution)
+
+    recording = RecordingSession("session-6", tmp_path)
+    recording.start(lambda frame: None)
+
+    thread = CaptureThread(
+        window_title="Lineage II",
+        fps=10,
+        on_frame=recording.publish,
+    )
+    thread.start()
+    time.sleep(0.15)
+    thread.stop()
+    thread.join(timeout=1.0)
+    recording.close()
+
+    assert recording.frame_count > 0
+    assert (tmp_path / "session-6" / "frames" / "000000.png").exists()

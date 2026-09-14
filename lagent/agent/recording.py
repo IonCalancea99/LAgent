@@ -136,7 +136,7 @@ class RecordingSession:
                 frame_number, frame = item
                 try:
                     (self.frames_dir / f"{frame_number:06d}.png").write_bytes(_frame_bytes(frame.frame))
-                except (OSError, TypeError, ValueError) as exc:
+                except Exception as exc:
                     logger.error("failed to archive frame %s for %s: %s", frame_number, self.session_id, exc)
             finally:
                 self._frame_queue.task_done()

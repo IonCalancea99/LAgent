@@ -421,23 +421,35 @@ class CaptureThread(threading.Thread):
             self._crop_offset = getattr(self.backend, "crop_offset", (0, 0))
             self._screen_offset = getattr(self.backend, "screen_offset", (0, 0))
         elif self.backend_name == "mss":
-            self._mss_monitor = _mss_monitor_for_window(self.window_title)
+            try:
+                self._mss_monitor = _mss_monitor_for_window(self.window_title)
+            except Exception as exc:
+                self.logger.warning(
+                    "mss monitor resolution failed for %s (%s); falling back to primary monitor",
+                    self.window_title,
+                    exc,
+                )
+                monitors = getattr(self.backend, "monitors", None)
+                if monitors:
+                    self._mss_monitor = monitors[1] if len(monitors) > 1 else monitors[0]
+                else:
+                    self._mss_monitor = {"left": 0, "top": 0, "width": 1920, "height": 1080}
             self._capture_region = (
                 self._mss_monitor["left"],
                 self._mss_monitor["top"],
-                self._mss_monitor["left"] + self._mss_monitor["width"],
-                self._mss_monitor["top"] + self._mss_monitor["height"],
+                self._mss_monitor["left"] + self._mss_monitor.get("width", 1920),
+                self._mss_monitor["top"] + self._mss_monitor.get("height", 1080),
             )
             self._window_rect = self._capture_region
             self._crop_offset = (0, 0)
             self._screen_offset = (self._mss_monitor["left"], self._mss_monitor["top"])
 
     def _capture_once(self) -> Frame | None:
-        self._ensure_backend()
-        timestamp = time.time()
-        captured_at_ms = int(time.time_ns() / 1_000_000)
-
         try:
+            self._ensure_backend()
+            timestamp = time.time()
+            captured_at_ms = int(time.time_ns() / 1_000_000)
+
             if self.backend_name == "dxcam":
                 region = getattr(self.backend, "window_region", None)
                 raw_frame = self.backend.grab(region=region) if hasattr(self.backend, "grab") else self.backend
@@ -467,12 +479,15 @@ class CaptureThread(threading.Thread):
 
         while not self._stop_event.is_set():
             started_at = time.monotonic()
-            frame = self._capture_once()
-            if frame is not None:
-                if self.on_frame is None:
-                    self.frame_queue.put_frame(frame)
-                else:
-                    self.on_frame(frame)
+            try:
+                frame = self._capture_once()
+                if frame is not None:
+                    if self.on_frame is None:
+                        self.frame_queue.put_frame(frame)
+                    else:
+                        self.on_frame(frame)
+            except Exception as exc:  # noqa: BLE001
+                self.logger.warning("uncaught error in capture loop for %s: %s", self.window_title, exc)
 
             elapsed = time.monotonic() - started_at
             remaining = max(0.0, interval - elapsed)
