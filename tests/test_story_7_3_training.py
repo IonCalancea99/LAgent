@@ -143,6 +143,25 @@ class TestDatasetValidation:
         assert annotations[0]["image_path"] == "frame_001.png"
         assert len(annotations[0]["annotations"]) == 1
 
+    def test_load_raw_label_studio_export_with_local_files_urls(self, tmp_path):
+        """Raw Label Studio export is a list with local-files image URLs."""
+        labels_file = tmp_path / "labels.json"
+        labels_file.write_text(json.dumps([
+            {
+                "data": {"image": "/data/local-files/?d=session-1/frames/000000.png"},
+                "annotations": [{"result": [{
+                    "type": "rectanglelabels",
+                    "value": {"x": 1, "y": 2, "width": 3, "height": 4, "rectanglelabels": ["mob"]},
+                }]}],
+            },
+            {"data": {"image": "/data/local-files/?d=session-1/frames/000001.png"}},
+        ]))
+
+        annotations = load_label_studio_annotations(labels_file)
+        assert [a["image_path"] for a in annotations] == ["000000.png", "000001.png"]
+        assert annotations[0]["annotations"][0]["label"] == "mob"
+        assert annotations[1]["annotations"] == []
+
 
 class TestModelTraining:
     """AC1: Fine-tuning YOLOv8-nano from training dataset"""

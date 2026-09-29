@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Label Studio Guide · LAgent Docs</title>
+<link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+<header class="topbar">
+  <button id="navToggle" aria-label="Toggle navigation">☰</button>
+  <div class="brand">🤖 LAgent Docs</div>
+  <div class="search-wrap">
+    <input id="searchInput" type="text" placeholder="Search docs…" autocomplete="off" />
+    <div id="searchResults" class="search-results"></div>
+  </div>
+  <button id="themeToggle" aria-label="Toggle theme">🌓</button>
+</header>
+
+<div class="layout">
+  <nav id="sidebar" class="sidebar"></nav>
+
+  <main class="content">
+    <h1>Label Studio Guide</h1>
+    <p>This page is the operational companion to the <a href="training.html">Training Pipeline</a>.
+      Use it when creating a Label Studio project, checking that every required label is present,
+      and preparing corrected annotations for YOLO training.</p>
+
+    <div class="callout warn">
+      <strong class="callout-title">The label names are part of the model contract</strong>
+      Label values are case-sensitive. Create only the labels listed for the model family, keep
+      their spelling unchanged, and train one model family at a time. A missing or inconsistent
+      label can make a model appear to train successfully while producing unusable detections.
+    </div>
+
+    <h2 id="workflow">Recommended workflow</h2>
+    <div class="pipeline">
+      <div class="step">1. Record or ingest frames</div>
+      <span class="sep">→</span>
+      <div class="step">2. Run YOLO prelabel</div>
+      <span class="sep">→</span>
+      <div class="step">3. Import tasks</div>
+      <span class="sep">→</span>
+      <div class="step">4. Correct every frame</div>
+      <span class="sep">→</span>
+      <div class="step">5. Export and normalize</div>
+      <span class="sep">→</span>
+      <div class="step">6. Train</div>
+    </div>
+    <ol>
+      <li>Stop any live session before running training or GPU-heavy prelabeling.</li>
+      <li>Run <code>python -m lagent.train prelabel --recording recordings/&lt;session-folder&gt;</code>
+        to create Label Studio prediction suggestions in <code>prelabeled.json</code>.</li>
+      <li>Create a Label Studio project with the exact template for the model family below, then
+        import <code>prelabeled.json</code>. If prelabeling is unavailable, create tasks from the
+        recording frames using the procedure in
+        <a href="training.html#label-studio-import">Training Pipeline: import frames</a>.</li>
+      <li>Correct every submitted frame, including frames with no objects. Empty frames are valid
+        negative examples.</li>
+      <li>Export raw Label Studio JSON and normalize it to <code>labels.json</code> before training.
+        Keep coordinates as percentages; the trainer converts them to YOLO coordinates.</li>
+    </ol>
+
+    <h2 id="setup">Install and create the project</h2>
+    <p>Label Studio runs as a separate local application. It is intentionally not installed as a
+      LAgent runtime dependency.</p>
+    <pre><code>python3.12 -m venv .label-studio-venv
+source .label-studio-venv/bin/activate
+python -m pip install -U pip label-studio
+LABEL_STUDIO_LOCAL_FILES_SERVING_ENABLED=true \
+LABEL_STUDIO_LOCAL_FILES_DOCUMENT_ROOT="$PWD/recordings" \
+label-studio start</code></pre>
+    <p>Open <code>http://localhost:8080</code>, create a project, choose
+      <strong>Labeling Setup → Custom Template</strong>, paste exactly one template below, and
+      save it before importing tasks. Replace no label values unless the corresponding model
+      code and training data are changed together.</p>
+
+    <h2 id="image-counts">How many images to label</h2>
+    <p>Counts below are planning heuristics per model family, not validated minimums or a guarantee
+      of model quality. They assume varied screenshots sampled across gameplay states. More frames
+      may be needed when objects are small, occluded, rare, or visually different across zones;
+      use held-out validation results to decide whether to collect more data.</p>
+    <table>
+      <thead><tr><th>Model family</th><th>Suggested starting set</th><th>Recommended first set</th><th>Per-label target</th></tr></thead>
+      <tbody>
+        <tr><td><code>common</code></td><td>1,000 images</td><td>3,000–5,000</td><td>300–500 positive images per label, plus 10–20% true negatives</td></tr>
+        <tr><td><code>warlord</code></td><td>800 images</td><td>2,000–4,000</td><td>500+ <code>mob</code> positives; 200+ <code>melee_range</code> positives if used</td></tr>
+        <tr><td><code>prophet</code></td><td>800 images</td><td>2,000–4,000</td><td>400+ positives each for <code>mob</code> and <code>character</code></td></tr>
+        <tr><td><code>fishing</code></td><td>500 images</td><td>1,500–3,000</td><td>500+ <code>tension_indicator</code> positives across all visual states</td></tr>
+      </tbody>
+    </table>
+    <p>These are starting targets, not a guarantee of quality. A rare class is better represented by
+      500 varied positive examples than by 5,000 near-identical screenshots. Hold out at least
+      20% of the frames for validation, and make sure both early and late portions of the recording
+      contain useful examples because the split is deterministic.</p>
+
+    <h2 id="common-template">Common model template</h2>
+    <p>Use this model for shared scene understanding. Label the controlled character, targetable
+      mobs, visible loot, and the complete death-state indicator.</p>
+    <pre><code>&lt;View&gt;
+  &lt;Image name="image" value="$image" zoom="true" zoomControl="true"/&gt;
+  &lt;RectangleLabels name="tag" toName="image" strokeWidth="2"&gt;
+    &lt;Label value="mob" background="#D55E00"/&gt;
+    &lt;Label value="character" background="#0072B2"/&gt;
+    &lt;Label value="loot" background="#009E73"/&gt;
+    &lt;Label value="death_screen" background="#CC79A7"/&gt;
+  &lt;/RectangleLabels&gt;
+&lt;/View&gt;</code></pre>
+    <table>
+      <thead><tr><th>Label</th><th>Draw the box around</th><th>Do not label</th></tr></thead>
+      <tbody>
+        <tr><td><code>mob</code></td><td>Each targetable hostile instance</td><td>Names, damage text, or decorative effects</td></tr>
+        <tr><td><code>character</code></td><td>The controlled character's visible body</td><td>Party members unless they are the controlled character</td></tr>
+        <tr><td><code>loot</code></td><td>Each visible loot object relevant to pickup</td><td>Ground texture or floating text</td></tr>
+        <tr><td><code>death_screen</code></td><td>The stable death panel or indicator</td><td>Temporary red flashes or unrelated UI</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="warlord-template">Warlord model template</h2>
+    <p>Use this model for combat targeting. <code>melee_range</code> is optional: configure it only
+      when the game provides a stable visible range indicator. Otherwise range is derived from
+      mob and character boxes.</p>
+    <pre><code>&lt;View&gt;
+  &lt;Image name="image" value="$image" zoom="true" zoomControl="true"/&gt;
+  &lt;RectangleLabels name="tag" toName="image" strokeWidth="2"&gt;
+    &lt;Label value="mob" background="#D55E00"/&gt;
+    &lt;Label value="melee_range" background="#F0E442"/&gt;
+  &lt;/RectangleLabels&gt;
+&lt;/View&gt;</code></pre>
+    <ul>
+      <li>Label every targetable hostile separately, including partially occluded hostiles when the
+        identity and useful extent are clear.</li>
+      <li>Use <code>melee_range</code> only for the same visual indicator in every frame. Do not
+        invent a box to represent an inferred distance.</li>
+      <li>Include idle, approaching, attacking, crowded, and empty combat scenes.</li>
+    </ul>
+
+    <h2 id="prophet-template">Prophet model template</h2>
+    <p>Use this model for buff-safety perception and the distance reference to the controlled
+      character.</p>
+    <pre><code>&lt;View&gt;
+  &lt;Image name="image" value="$image" zoom="true" zoomControl="true"/&gt;
+  &lt;RectangleLabels name="tag" toName="image" strokeWidth="2"&gt;
+    &lt;Label value="mob" background="#D55E00"/&gt;
+    &lt;Label value="character" background="#0072B2"/&gt;
+  &lt;/RectangleLabels&gt;
+&lt;/View&gt;</code></pre>
+    <ul>
+      <li>Label the controlled character consistently, even when only part of the body is visible.</li>
+      <li>Label every nearby hostile relevant to the buff safety decision, not only the current target.</li>
+      <li>Include safe scenes, unsafe scenes, crowded scenes, and scenes where the character is absent.</li>
+    </ul>
+
+    <h2 id="fishing-template">Fishing model template</h2>
+    <p>Use this model only for the stable visual indicator that signals fishing tension while the
+      fishing FSM is waiting.</p>
+    <pre><code>&lt;View&gt;
+  &lt;Image name="image" value="$image" zoom="true" zoomControl="true"/&gt;
+  &lt;RectangleLabels name="tag" toName="image" strokeWidth="2"&gt;
+    &lt;Label value="tension_indicator" background="#009E73"/&gt;
+  &lt;/RectangleLabels&gt;
+&lt;/View&gt;</code></pre>
+    <ul>
+      <li>Box the complete visible indicator, not just the changing fill or a single pixel.</li>
+      <li>Include the indicator at low, medium, and high tension when those states are visually distinct.</li>
+      <li>Include empty frames for waiting states where no tension indicator is visible.</li>
+    </ul>
+
+    <h2 id="quality-check">Labeling quality check</h2>
+    <p>Before exporting, verify each item below for every model family:</p>
+    <ul>
+      <li>Every task is submitted; no task remains a draft.</li>
+      <li>Every visible in-scope object has exactly one appropriate box, and each object instance has its own box.</li>
+      <li>True negative frames are empty; do not draw a full-frame box for “none.”</li>
+      <li>Boxes stay within the image and have non-zero width and height.</li>
+      <li>Label spelling and capitalization exactly match the selected template.</li>
+      <li>Examples cover different maps, backgrounds, scales, animation states, occlusion, and screen positions.</li>
+      <li>Near-duplicate frames do not dominate the dataset.</li>
+      <li>The rarest label meets its target before training begins.</li>
+    </ul>
+
+    <h2 id="export">Export and prepare training input</h2>
+    <ol>
+      <li>Choose <strong>Export → JSON</strong> in Label Studio. Do not use COCO, YOLO, JSON-MIN, or predictions-only output.</li>
+      <li>Save the export as <code>label-studio-export.json</code> in the recording directory.</li>
+      <li>Run the normalization snippet in <a href="training.html#label-studio-export">Training Pipeline: export and normalize</a>.</li>
+      <li>Confirm that <code>labels.json</code> contains <code>{"tasks": [...]}</code>, every task points to a filename under <code>frames/</code>, and each rectangle result has type <code>rectanglelabels</code>.</li>
+      <li>Run <code>python -m lagent.train train --recording recordings/&lt;session-folder&gt; --model-class &lt;family&gt;</code>.</li>
+    </ol>
+    <div class="callout info">
+      <strong class="callout-title">Review predictions before training</strong>
+      <code>prelabeled.json</code> contains prediction suggestions, not reviewed annotations.
+      Correct and submit every task before exporting; the trainer consumes the submitted
+      annotations, not predictions alone. Raw Label Studio exports are accepted directly, or
+      you can normalize them to <code>labels.json</code> as described in the training guide.
+    </div>
+
+    <div class="page-nav"></div>
+  </main>
+
+  <aside id="toc" class="toc"></aside>
+</div>
+
+<script src="assets/search-index.js"></script>
+<script src="assets/app.js" data-page="label-studio"></script>
+</body>
+</html>

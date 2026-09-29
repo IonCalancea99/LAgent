@@ -49,13 +49,17 @@
       your own recordings (e.g. community footage of fishing mechanics).</p>
 
     <div class="callout warn">
-      <strong class="callout-title">Current Label Studio integration limitation</strong>
-      The generated <code>prelabeled.json</code> is useful for inspecting detections, but its
-      current region shape and pixel coordinates are not directly importable by Label Studio.
-      In addition, Label Studio exports a top-level JSON list while the trainer currently expects
-      <code>{"tasks": [...]}</code>. Until those formats are aligned, use the manual task import
-      and export-normalization steps below. Do not rename <code>prelabeled.json</code> to
-      <code>labels.json</code>; training will find no usable rectangles.
+      <strong class="callout-title">Review predictions before training</strong>
+      The generated <code>prelabeled.json</code> can be imported into Label Studio as prediction
+      suggestions. Correct and submit every task, then train from the reviewed annotations;
+      predictions alone are not used as training labels. The trainer accepts raw Label Studio
+      JSON exports as well as the normalized <code>{"tasks": [...]}</code> form described below.
+    </div>
+    <div class="callout info">
+      <strong class="callout-title">Use the class-specific labeling guide</strong>
+      Before creating a project, open the <a href="label-studio.html">Label Studio Guide</a>.
+      It contains copy-paste templates for Common, Warlord, Prophet, and Fishing, plus minimum
+      and recommended image counts and a pre-export quality checklist.
     </div>
 
     <h2 id="recording">1. Recording gameplay</h2>
@@ -128,11 +132,11 @@
         <tr><td><code>--model-root</code></td><td><code>models</code></td><td>Root directory containing <code>&lt;class&gt;/current.pt</code> models</td></tr>
       </tbody>
     </table>
-    <p>The command writes <code>recordings/&lt;session-folder&gt;/prelabeled.json</code>. It requires
+    <p>The command writes <code>recordings/&lt;session-folder&gt;/prelabeled.json</code>, which can
+      be imported into Label Studio as prediction suggestions. It requires
       both <code>frames/</code> and <code>inputs.jsonl</code>, accepts PNG/JPG/JPEG frames, skips
-      unreadable frames, and overwrites the previous prelabel file atomically. Because of the
-      format limitation above, keep this file as a detection reference; follow the manual Label
-      Studio workflow below to produce the training input.</p>
+      unreadable frames, and overwrites the previous prelabel file atomically. Review and submit
+      the suggestions in Label Studio, then export the corrected annotations for training.</p>
 
     <h2 id="label-studio-setup">3. Install and start Label Studio</h2>
     <p>Label Studio is an external application and is not installed by LAgent. Install it in a
@@ -164,6 +168,10 @@ label-studio start</code></pre>
       or filesystem root.</p>
 
     <h2 id="label-studio-project">4. Create the labeling project</h2>
+    <p>Choose the template for the model family you are training from the
+      <a href="label-studio.html#common-template">Label Studio Guide</a>. Do not combine labels
+      from different model families in one project unless you are intentionally changing the
+      model contract and all downstream consumers.</p>
     <ol>
       <li>Click <strong>Create Project</strong> and name it after one recording and model family,
         for example <code>fishing-2026-09-29</code>.</li>
@@ -272,8 +280,9 @@ PY</code></pre>
       <li>Click <strong>Export</strong> in Label Studio.</li>
       <li>Select the raw <strong>JSON</strong> format, not JSON-MIN, COCO, YOLO, or a predictions-only format.</li>
       <li>Save the download as <code>recordings/&lt;session-folder&gt;/label-studio-export.json</code>.</li>
-      <li>Run the normalization command below. It wraps the top-level list and converts local-file
-        URLs back to frame filenames without changing Label Studio's percentage coordinates.</li>
+        <li>Optionally run the normalization command below to keep the raw export and create a
+          wrapped <code>labels.json</code> with frame filenames. The trainer also accepts a raw
+          top-level list and resolves local-file URLs directly.</li>
     </ol>
     <pre><code>python - &lt;&lt;'PY'
 import json

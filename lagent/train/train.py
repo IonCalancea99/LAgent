@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
+from urllib.parse import parse_qs, urlparse
 
 logger = logging.getLogger(__name__)
 
@@ -173,13 +174,22 @@ def load_label_studio_annotations(labels_file: Path) -> list[dict[str, Any]]:
     with open(labels_file, "r") as f:
         label_studio_data = json.load(f)
 
+    # Raw Label Studio exports are a top-level list; legacy files wrap it in {"tasks": [...]}.
+    if isinstance(label_studio_data, list):
+        tasks = label_studio_data
+    else:
+        tasks = label_studio_data.get("tasks", [])
+
     annotations_list = []
     
-    for task in label_studio_data.get("tasks", []):
-        frame_name = task.get("data", {}).get("image")
-        if not frame_name:
+    for task in tasks:
+        image_ref = task.get("data", {}).get("image")
+        if not image_ref:
             logger.warning("Task %s missing image path", task.get("id"))
             continue
+        # "/data/local-files/?d=<session>/frames/000000.png" -> "000000.png"
+        query_path = parse_qs(urlparse(image_ref).query).get("d", [image_ref])[0]
+        frame_name = Path(query_path).name
 
         task_annotations = []
         for anno in task.get("annotations", []):

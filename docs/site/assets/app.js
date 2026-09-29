@@ -10,6 +10,7 @@ const NAV_ITEMS = [
   { id: "quest-mode", href: "quest-mode.html", label: "Quest Mode", icon: "\ud83d\udcdc" },
   { id: "class-flows", href: "class-flows.html", label: "Class Leveling Flows", icon: "\ud83e\udded" },
   { id: "training", href: "training.html", label: "Training Pipeline", icon: "\ud83c\udf93" },
+  { id: "label-studio", href: "label-studio.html", label: "Label Studio Guide", icon: "\ud83c\udfaf" },
   { id: "architecture", href: "architecture.html", label: "Architecture", icon: "\ud83c\udfd7\ufe0f" },
   { id: "troubleshooting", href: "troubleshooting.html", label: "Troubleshooting", icon: "\ud83d\udee0\ufe0f" },
 ];

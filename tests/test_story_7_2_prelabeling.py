@@ -227,37 +227,44 @@ class TestLabelStudioFormat:
         tasks = build_label_studio_json(inference_results, Path("recordings/session123"))
         
         assert len(tasks) == 1
-        assert tasks[0]["id"] == 1
         assert "data" in tasks[0]
 
     def test_label_studio_image_reference(self) -> None:
-        """Task image_url references the frame file."""
+        """Task image is a Label Studio local-files URL relative to recordings/."""
         from lagent.common import Detection, PerceptionResult
         from lagent.train.prelabel import build_label_studio_json
         
         inference_results = [
-            (Path("frame_0.png"), PerceptionResult(detections=[]))
+            (Path("recordings/session123/frames/000000.png"), PerceptionResult(detections=[]))
         ]
         tasks = build_label_studio_json(inference_results, Path("recordings/session123"))
         
-        assert "image" in tasks[0]["data"] or "image_url" in tasks[0]["data"]
+        assert tasks[0] == {
+            "data": {"image": "/data/local-files/?d=session123/frames/000000.png"}
+        }
 
     def test_label_studio_regions_from_detections(self) -> None:
-        """Detections are converted to Label Studio regions."""
+        """Detections are converted to Label Studio rectanglelabels predictions in percent."""
         from lagent.common import Detection, PerceptionResult
         from lagent.train.prelabel import build_label_studio_json
         
+        frame = Path("recordings/session123/frames/000000.png")
         inference_results = [
-            (Path("frame_0.png"), PerceptionResult(detections=[
-                Detection(class_name="mob", confidence=0.95, bbox_xyxy=(10, 20, 100, 150))
+            (frame, PerceptionResult(detections=[
+                Detection(class_name="mob", confidence=0.95, bbox_xyxy=(10, 20, 100, 70))
             ]))
         ]
-        tasks = build_label_studio_json(inference_results, Path("recordings/session123"))
+        with patch("lagent.train.prelabel._read_image_size", return_value=(200, 100)):
+            tasks = build_label_studio_json(inference_results, Path("recordings/session123"))
         
-        assert "annotations" in tasks[0]
-        if tasks[0]["annotations"]:
-            result = tasks[0]["annotations"][0]
-            assert "result" in result or "regions" in result
+        result = tasks[0]["predictions"][0]["result"][0]
+        assert result["type"] == "rectanglelabels"
+        assert result["from_name"] == "tag"
+        assert result["to_name"] == "image"
+        assert result["value"] == {
+            "x": 5.0, "y": 20.0, "width": 45.0, "height": 50.0,
+            "rotation": 0, "rectanglelabels": ["mob"],
+        }
 
     def test_bbox_conversion_xyxy_to_label_studio(self) -> None:
         """Bounding boxes are converted from xyxy to Label Studio xywh format."""

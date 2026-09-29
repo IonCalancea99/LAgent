@@ -183,59 +183,71 @@ def convert_bbox_xyxy_to_label_studio(bbox_xyxy: tuple[int, int, int, int]) -> t
     return (x1, y1, width, height)
 
 
+LABEL_STUDIO_FROM_NAME = "tag"
+LABEL_STUDIO_TO_NAME = "image"
+
+
+def label_studio_image_url(recording_dir: Path, frame_path: Path) -> str:
+    """Build a local-files URL relative to LABEL_STUDIO_LOCAL_FILES_DOCUMENT_ROOT (recordings/)."""
+    return f"/data/local-files/?d={recording_dir.name}/frames/{frame_path.name}"
+
+
+def _read_image_size(frame_path: Path) -> tuple[int, int] | None:
+    try:
+        from PIL import Image
+        with Image.open(frame_path) as image:
+            return image.size
+    except Exception as exc:
+        logger.warning("Cannot read image size for %s: %s", frame_path, exc)
+        return None
+
+
 def build_label_studio_json(
     inference_results: list[tuple[Path, PerceptionResult]],
     recording_dir: Path,
 ) -> list[dict[str, Any]]:
-    """Convert inference results to Label Studio JSON format.
+    """Convert inference results to Label Studio import JSON.
     
-    AC-2: Generate Label Studio JSON with:
-      - Image URLs/paths
-      - Bounding box regions with class names and confidence
-      - Deterministic ordering (reproducible)
-    
-    AC-3: Include frame metadata for traceability.
+    AC-2: Each task has data.image as a local-files URL and detections as
+    predictions in Label Studio's rectanglelabels format (percent coordinates).
     """
     tasks: list[dict[str, Any]] = []
     
-    for task_id, (frame_path, perception) in enumerate(inference_results, start=1):
-        # Build annotations from detections
-        regions: list[dict[str, Any]] = []
-        for detection in perception.detections:
-            x, y, width, height = convert_bbox_xyxy_to_label_studio(detection.bbox_xyxy)
-            
-            region = {
-                "id": f"region_{len(regions)}",
-                "type": "rectangle",
-                "x": x,
-                "y": y,
-                "width": width,
-                "height": height,
-                "rotation": 0,
-                "label": [detection.class_name],
-                "score": detection.confidence,
-            }
-            regions.append(region)
+    for frame_index, (frame_path, perception) in enumerate(inference_results):
+        results: list[dict[str, Any]] = []
+        image_size = _read_image_size(frame_path) if perception.detections else None
+        if image_size:
+            image_width, image_height = image_size
+            for detection in perception.detections:
+                x, y, width, height = convert_bbox_xyxy_to_label_studio(detection.bbox_xyxy)
+                results.append({
+                    "id": f"f{frame_index}_r{len(results)}",
+                    "from_name": LABEL_STUDIO_FROM_NAME,
+                    "to_name": LABEL_STUDIO_TO_NAME,
+                    "type": "rectanglelabels",
+                    "original_width": image_width,
+                    "original_height": image_height,
+                    "image_rotation": 0,
+                    "score": detection.confidence,
+                    "value": {
+                        "x": x / image_width * 100,
+                        "y": y / image_height * 100,
+                        "width": width / image_width * 100,
+                        "height": height / image_height * 100,
+                        "rotation": 0,
+                        "rectanglelabels": [detection.class_name],
+                    },
+                })
         
-        # Create task
-        task = {
-            "id": task_id,
-            "data": {
-                "image": str(frame_path.name),  # Frame filename for reference
-                "image_url": str(frame_path),   # Full path for Label Studio import
-            },
-            "annotations": [
-                {
-                    "id": f"annotation_{task_id}",
-                    "completed_by": 1,  # Prelabeled by system
-                    "result": regions,
-                }
-            ] if regions else [],
-            "meta": {
-                "frame_index": task_id - 1,
-                "frame_name": frame_path.name,
-            }
+        task: dict[str, Any] = {
+            "data": {"image": label_studio_image_url(recording_dir, frame_path)},
         }
+        if results:
+            task["predictions"] = [{
+                "model_version": "lagent-prelabel",
+                "score": min(r["score"] for r in results),
+                "result": results,
+            }]
         tasks.append(task)
     
     logger.info("Built Label Studio JSON with %d tasks", len(tasks))
