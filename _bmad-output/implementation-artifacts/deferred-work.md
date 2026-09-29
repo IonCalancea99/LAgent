@@ -7,3 +7,10 @@
 ## Deferred from: code review of 3-4-micro-drift-error-injection (2026-08-26)
 
 - Dict profile Bezier range is ignored in `lagent/hsl/mouse.py:390`; pre-existing behavior, not introduced by Story 3.4.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-lineage2-fishing-pump-reel-controller.md`
+	summary: Advance FSM deadlines when inference results stop arriving.
+	evidence: `AgentLoop.tick()` bypasses the state handler when frame/result queues are empty or mismatched, so both the pre-existing bite timeout and the new fight timeout cannot fire during an inference outage.
+- source_spec: `_bmad-output/implementation-artifacts/spec-lineage2-fishing-pump-reel-controller.md`
+	summary: Synchronize heartbeat pause snapshots with the loop's transitioned FSM state.
+	evidence: `AgentLoop` owns the post-action state transition while `FishingFSM.pause_for_session_halt()` snapshots its last invoked state, so a pause between those operations can resume one state behind.

@@ -152,8 +152,7 @@ label-studio start</code></pre>
     </ul>
 
     <h2 id="fishing-template">Fishing model template</h2>
-    <p>Use this model only for the stable visual indicator that signals fishing tension while the
-      fishing FSM is waiting.</p>
+    <p>Use this model for the changing filled fish-HP segment while the fishing FSM is waiting.</p>
     <pre><code>&lt;View&gt;
   &lt;Image name="image" value="$image" zoom="true" zoomControl="true"/&gt;
   &lt;RectangleLabels name="tag" toName="image" strokeWidth="2"&gt;
@@ -161,8 +160,8 @@ label-studio start</code></pre>
   &lt;/RectangleLabels&gt;
 &lt;/View&gt;</code></pre>
     <ul>
-      <li>Box the complete visible indicator, not just the changing fill or a single pixel.</li>
-      <li>Include the indicator at low, medium, and high tension when those states are visually distinct.</li>
+      <li>Box only the filled fish-HP segment. Do not include the complete static gauge frame or empty track.</li>
+      <li>Include the filled segment at low, medium, and high widths so its bounding-box width tracks fish HP.</li>
       <li>Include empty frames for waiting states where no tension indicator is visible.</li>
     </ul>
 

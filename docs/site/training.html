@@ -202,10 +202,16 @@ label-studio start</code></pre>
         <tr><td><code>common</code></td><td><code>mob</code>, <code>character</code>, <code>loot</code>, <code>death_screen</code></td><td>A targetable hostile; the controlled character; a visible loot object; the full death-state panel or stable death indicator.</td></tr>
         <tr><td><code>warlord</code></td><td><code>mob</code>; optionally <code>melee_range</code></td><td>Every targetable hostile relevant to combat. Use <code>melee_range</code> only when there is a consistent visible range indicator; otherwise distance is computed from mob boxes.</td></tr>
         <tr><td><code>prophet</code></td><td><code>mob</code>, <code>character</code></td><td>Nearby hostiles used for buff-safety checks and the controlled character used as the distance reference.</td></tr>
-        <tr><td><code>fishing</code></td><td><code>tension_indicator</code></td><td>The complete, visible UI indicator that signals fishing tension while the FSM is waiting.</td></tr>
+        <tr><td><code>fishing</code></td><td><code>tension_indicator</code></td><td>Only the filled fish-HP segment; exclude the complete static gauge frame and empty track.</td></tr>
         <tr><td>Startup identification (optional)</td><td><code>warlord_skill</code>, <code>prophet_skill</code></td><td>A stable class-specific skill icon used only when automatic profile identification is required.</td></tr>
       </tbody>
     </table>
+    <div class="callout info">
+      <strong class="callout-title">Fishing trends belong to the FSM</strong>
+      YOLO detects the filled fish-HP segment independently in each frame. The fishing FSM compares
+      consecutive bounding-box widths to derive steady, rising, or falling HP; do not add those trends
+      as Label Studio classes or train from <code>inputs.jsonl</code>.
+    </div>
     <div class="callout info">
       <strong class="callout-title">ROIs and OCR values are not object labels</strong>
       Do not box health or mana numbers merely because <code>health_bar</code> and
