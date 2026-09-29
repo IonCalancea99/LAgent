@@ -39,7 +39,7 @@
       <span class="sep">→</span>
       <div class="step">2. Auto-prelabel</div>
       <span class="sep">→</span>
-      <div class="step">3. Correct in Label Studio</div>
+      <div class="step">3. Label in Label Studio</div>
       <span class="sep">→</span>
       <div class="step">4. Train / fine-tune</div>
       <span class="sep">→</span>
@@ -47,6 +47,16 @@
     </div>
     <p>YouTube ingestion feeds the same pipeline at step 1, as an alternative or supplement to
       your own recordings (e.g. community footage of fishing mechanics).</p>
+
+    <div class="callout warn">
+      <strong class="callout-title">Current Label Studio integration limitation</strong>
+      The generated <code>prelabeled.json</code> is useful for inspecting detections, but its
+      current region shape and pixel coordinates are not directly importable by Label Studio.
+      In addition, Label Studio exports a top-level JSON list while the trainer currently expects
+      <code>{"tasks": [...]}</code>. Until those formats are aligned, use the manual task import
+      and export-normalization steps below. Do not rename <code>prelabeled.json</code> to
+      <code>labels.json</code>; training will find no usable rectangles.
+    </div>
 
     <h2 id="recording">1. Recording gameplay</h2>
     <p>Start an agent process with <code>--record</code> to capture frames and your manual
@@ -118,10 +128,183 @@
         <tr><td><code>--model-root</code></td><td><code>models</code></td><td>Root directory containing <code>&lt;class&gt;/current.pt</code> models</td></tr>
       </tbody>
     </table>
-    <p>Import the resulting annotation file into Label Studio, review, and correct any wrong or
-      missing labels before training.</p>
+    <p>The command writes <code>recordings/&lt;session-folder&gt;/prelabeled.json</code>. It requires
+      both <code>frames/</code> and <code>inputs.jsonl</code>, accepts PNG/JPG/JPEG frames, skips
+      unreadable frames, and overwrites the previous prelabel file atomically. Because of the
+      format limitation above, keep this file as a detection reference; follow the manual Label
+      Studio workflow below to produce the training input.</p>
 
-    <h2 id="train">3. Model training</h2>
+    <h2 id="label-studio-setup">3. Install and start Label Studio</h2>
+    <p>Label Studio is an external application and is not installed by LAgent. Install it in a
+      separate virtual environment so its web-app dependencies cannot change LAgent's runtime
+      environment:</p>
+    <div class="command-pair">
+      <div class="command-block">
+        <h3>macOS / Linux (bash, zsh)</h3>
+        <pre><code>python3.12 -m venv .label-studio-venv
+source .label-studio-venv/bin/activate
+python -m pip install -U pip label-studio
+LABEL_STUDIO_LOCAL_FILES_SERVING_ENABLED=true \
+LABEL_STUDIO_LOCAL_FILES_DOCUMENT_ROOT="$PWD/recordings" \
+label-studio start</code></pre>
+      </div>
+      <div class="command-block">
+        <h3>Windows PowerShell</h3>
+        <pre><code>py -3.12 -m venv .label-studio-venv
+.\.label-studio-venv\Scripts\Activate.ps1
+python -m pip install -U pip label-studio
+$env:LABEL_STUDIO_LOCAL_FILES_SERVING_ENABLED="true"
+$env:LABEL_STUDIO_LOCAL_FILES_DOCUMENT_ROOT=(Resolve-Path recordings)
+label-studio start</code></pre>
+      </div>
+    </div>
+    <p>Leave this terminal running and open <code>http://localhost:8080</code>. Create the local
+      account requested on first launch. Local-file serving gives Label Studio read-only browser
+      access beneath <code>recordings/</code>; do not set the document root to your home directory
+      or filesystem root.</p>
+
+    <h2 id="label-studio-project">4. Create the labeling project</h2>
+    <ol>
+      <li>Click <strong>Create Project</strong> and name it after one recording and model family,
+        for example <code>fishing-2026-09-29</code>.</li>
+      <li>Open <strong>Labeling Setup</strong>, choose <strong>Custom Template</strong>, and paste
+        the configuration below.</li>
+      <li>Replace the sample <code>&lt;Label&gt;</code> rows with the exact classes needed by the model
+        family you are training. Label names are case-sensitive training data: use lowercase and
+        do not mix synonyms such as <code>mob</code>, <code>enemy</code>, and <code>monster</code>.</li>
+      <li>Save the configuration before importing tasks.</li>
+    </ol>
+    <pre><code>&lt;View&gt;
+  &lt;Image name="image" value="$image" zoom="true" zoomControl="true"/&gt;
+  &lt;RectangleLabels name="tag" toName="image" strokeWidth="2"&gt;
+    &lt;Label value="mob" background="#D55E00"/&gt;
+    &lt;Label value="character" background="#0072B2"/&gt;
+    &lt;Label value="loot" background="#009E73"/&gt;
+    &lt;Label value="death_screen" background="#CC79A7"/&gt;
+  &lt;/RectangleLabels&gt;
+&lt;/View&gt;</code></pre>
+
+    <h3 id="label-taxonomy">Which classes should be labeled?</h3>
+    <p>Train one model family at a time. Start with the smallest vocabulary required by that
+      behavior; extra classes consume labeling time and can reduce quality when examples are
+      sparse.</p>
+    <table>
+      <thead><tr><th>Model family</th><th>Canonical labels</th><th>What each box means</th></tr></thead>
+      <tbody>
+        <tr><td><code>common</code></td><td><code>mob</code>, <code>character</code>, <code>loot</code>, <code>death_screen</code></td><td>A targetable hostile; the controlled character; a visible loot object; the full death-state panel or stable death indicator.</td></tr>
+        <tr><td><code>warlord</code></td><td><code>mob</code>; optionally <code>melee_range</code></td><td>Every targetable hostile relevant to combat. Use <code>melee_range</code> only when there is a consistent visible range indicator; otherwise distance is computed from mob boxes.</td></tr>
+        <tr><td><code>prophet</code></td><td><code>mob</code>, <code>character</code></td><td>Nearby hostiles used for buff-safety checks and the controlled character used as the distance reference.</td></tr>
+        <tr><td><code>fishing</code></td><td><code>tension_indicator</code></td><td>The complete, visible UI indicator that signals fishing tension while the FSM is waiting.</td></tr>
+        <tr><td>Startup identification (optional)</td><td><code>warlord_skill</code>, <code>prophet_skill</code></td><td>A stable class-specific skill icon used only when automatic profile identification is required.</td></tr>
+      </tbody>
+    </table>
+    <div class="callout info">
+      <strong class="callout-title">ROIs and OCR values are not object labels</strong>
+      Do not box health or mana numbers merely because <code>health_bar</code> and
+      <code>mana_bar</code> appear in a profile. Those are fixed profile ROIs read by EasyOCR.
+      Likewise, keyboard and mouse events in <code>inputs.jsonl</code> are metadata, not labels.
+    </div>
+
+    <h2 id="label-studio-import">5. Import the recording frames</h2>
+    <p>Generate a Label Studio task file whose image URLs point to the recording directory. Run
+      this from the repository root with LAgent's environment active, replacing the placeholder
+      once:</p>
+    <pre><code>python - &lt;&lt;'PY'
+import json
+from pathlib import Path
+
+recording = Path("recordings/&lt;session-folder&gt;")
+extensions = {".png", ".jpg", ".jpeg"}
+frames = sorted(p for p in (recording / "frames").iterdir()
+                if p.is_file() and p.suffix.lower() in extensions)
+tasks = [{"data": {"image":
+          f"/data/local-files/?d={recording.name}/frames/{frame.name}"}}
+         for frame in frames]
+(recording / "label-studio-tasks.json").write_text(
+    json.dumps(tasks, indent=2), encoding="utf-8")
+print(f"Wrote {len(tasks)} tasks")
+PY</code></pre>
+    <p>The wrapper above is for bash/zsh. In Windows PowerShell, use the same Python body between
+      a here-string and pipe it to the active interpreter:</p>
+    <pre><code>@'
+# Paste the Python lines from import json through print(...), without PY.
+'@ | python -</code></pre>
+    <p>In the project, open <strong>Data Manager → Import</strong>, select
+      <code>recordings/&lt;session-folder&gt;/label-studio-tasks.json</code>, and confirm that the
+      preview shows images. If images are blank, verify that Label Studio was launched from the
+      repository root with both local-file environment variables set and that the session folder
+      name exactly matches the URL after <code>?d=</code>.</p>
+
+    <h2 id="labeling-rules">6. Draw and review bounding boxes</h2>
+    <ul>
+      <li>Draw one rectangle per visible object instance. Repeated mobs require separate boxes.</li>
+      <li>Fit the box tightly around the visible object or indicator; avoid large areas of sky,
+        terrain, neighboring objects, or unrelated UI.</li>
+      <li>Use the same visual boundary in every frame. For example, choose either the mob body or
+        its target frame and apply that choice consistently throughout the project.</li>
+      <li>Label partially occluded objects only when their identity and useful extent are clear.
+        Skip ambiguous fragments instead of guessing.</li>
+      <li>Include difficult valid examples: different backgrounds, animation states, scales,
+        lighting, overlaps, and screen positions.</li>
+      <li>Leave true negative frames empty and submit them. They teach the model when the object
+        is absent. Do not draw a box around the whole frame to represent “none.”</li>
+      <li>Do not label mouse cursors, floating damage text, names, OCR numbers, decorative icons,
+        or objects outside the intended definition.</li>
+    </ul>
+    <h3>Review checklist before export</h3>
+    <ul>
+      <li>Every task is submitted, including empty negative frames; no task remains only a draft.</li>
+      <li>No visible in-scope object is missing and no box contains multiple object instances.</li>
+      <li>Labels use exactly the configured spelling; synonyms and capitalization variants are absent.</li>
+      <li>Boxes stay inside the image and have non-zero width and height.</li>
+      <li>Near-duplicate frames do not dominate the dataset. Keep varied examples when pruning.</li>
+      <li>Both the early and late parts of the chronologically sorted recording contain useful,
+        labeled examples because the trainer uses a deterministic ordered split.</li>
+    </ul>
+
+    <h2 id="label-studio-export">7. Export and normalize <code>labels.json</code></h2>
+    <ol>
+      <li>Click <strong>Export</strong> in Label Studio.</li>
+      <li>Select the raw <strong>JSON</strong> format, not JSON-MIN, COCO, YOLO, or a predictions-only format.</li>
+      <li>Save the download as <code>recordings/&lt;session-folder&gt;/label-studio-export.json</code>.</li>
+      <li>Run the normalization command below. It wraps the top-level list and converts local-file
+        URLs back to frame filenames without changing Label Studio's percentage coordinates.</li>
+    </ol>
+    <pre><code>python - &lt;&lt;'PY'
+import json
+from pathlib import Path
+from urllib.parse import parse_qs, urlparse
+
+recording = Path("recordings/&lt;session-folder&gt;")
+tasks = json.loads((recording / "label-studio-export.json").read_text(encoding="utf-8"))
+if not isinstance(tasks, list):
+    raise SystemExit("Expected Label Studio raw JSON export to be a list")
+for task in tasks:
+    image = task.get("data", {}).get("image", "")
+    query_path = parse_qs(urlparse(image).query).get("d", [image])[0]
+    task["data"]["image"] = Path(query_path).name
+(recording / "labels.json").write_text(
+    json.dumps({"tasks": tasks}, indent=2), encoding="utf-8")
+print(f"Wrote labels.json with {len(tasks)} tasks")
+PY</code></pre>
+    <p>For Windows PowerShell, use the same <code>@' ... '@ | python -</code> wrapper shown in the
+      import step, this time with the export-normalization Python body.</p>
+    <p>The recording directory is ready only when it contains this shape:</p>
+    <pre><code>recordings/&lt;session-folder&gt;/
+├── frames/
+│   ├── 000000.png
+│   └── ...
+├── inputs.jsonl
+├── label-studio-export.json  # retained source export
+└── labels.json               # normalized input consumed by training</code></pre>
+    <div class="callout warn">
+      <strong class="callout-title">Keep Label Studio percentages unchanged</strong>
+      Raw JSON exports store <code>x</code>, <code>y</code>, <code>width</code>, and
+      <code>height</code> as percentages from 0 to 100. The trainer converts those values to YOLO
+      coordinates. Do not convert them to pixels.
+    </div>
+
+    <h2 id="train">8. Model training</h2>
     <div class="command-pair">
       <div class="command-block">
         <h3>macOS / Linux (bash, zsh)</h3>
@@ -165,6 +348,19 @@
         <tr><td><code>--mlflow-dir</code></td><td><code>models/.mlflow</code></td><td>Local MLflow tracking directory</td></tr>
         <tr><td><code>--mAP-threshold</code></td><td><code>0.65</code></td><td>Minimum mAP50 required before the new model is deployed</td></tr>
         <tr><td><code>--device</code></td><td><code>cuda</code></td><td><code>cuda</code> or <code>cpu</code></td></tr>
+      </tbody>
+    </table>
+
+    <h3 id="label-studio-troubleshooting">Labeling and export troubleshooting</h3>
+    <table>
+      <thead><tr><th>Symptom</th><th>Likely cause</th><th>Action</th></tr></thead>
+      <tbody>
+        <tr><td>Images are blank in Label Studio</td><td>Local-file serving is disabled, the document root is wrong, or <code>?d=</code> points outside it</td><td>Restart Label Studio with the documented environment variables and regenerate the task file.</td></tr>
+        <tr><td>Import rejects <code>prelabeled.json</code></td><td>The current prelabel artifact is not standard Label Studio prediction JSON</td><td>Import <code>label-studio-tasks.json</code> and label manually; retain prelabels only as a reference.</td></tr>
+        <tr><td><code>No rectangle annotations found</code></td><td>The wrong export format was used, tasks were not submitted, or the raw list was not normalized</td><td>Export raw JSON, run the normalization step, and confirm results have type <code>rectanglelabels</code>.</td></tr>
+        <tr><td><code>Annotated frame not found</code></td><td><code>data.image</code> still contains a URL or uploaded-file name</td><td>Regenerate <code>labels.json</code> and confirm every image value is exactly a filename present under <code>frames/</code>.</td></tr>
+        <tr><td>Validation set has no useful labels</td><td>Chronological frames near the end are empty or repetitive</td><td>Add or retain varied labeled examples throughout the recording before exporting.</td></tr>
+        <tr><td>Training succeeds but behavior uses the wrong objects</td><td>Label semantics were inconsistent or aliases were mixed</td><td>Audit the project against the taxonomy and box rules, correct it, export again, and retrain.</td></tr>
       </tbody>
     </table>
 

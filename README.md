@@ -50,6 +50,7 @@ Prepare profiles and model weights before starting a session. Quest Mode remains
 - [Running LAgent](docs/site/running.html)
 - [Combat Mode](docs/site/combat-mode.html)
 - [Quest Mode](docs/site/quest-mode.html)
+- [Training and Label Studio](docs/site/training.html)
 - [Architecture](docs/site/architecture.html)
 - [Architecture decisions](docs/architecture-decisions.md)
 - [Contributing](CONTRIBUTING.md)
