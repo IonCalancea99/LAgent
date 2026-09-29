@@ -108,7 +108,7 @@ def main() -> None:
     )
     prelabel_parser.add_argument(
         "--recording",
-        type=str,
+        type=Path,
         required=True,
         help="Path to recording directory containing frames/ subdirectory",
     )
@@ -126,7 +126,7 @@ def main() -> None:
     )
     prelabel_parser.add_argument(
         "--model-root",
-        type=str,
+        type=Path,
         default="models",
         help="Root directory for YOLO models (default: models)",
     )
@@ -162,15 +162,7 @@ def main() -> None:
 
     elif args.subcommand == "prelabel":
         from lagent.train.prelabel import prelabel_command
-        # Reconstruct args for prelabel_command by re-parsing just the prelabel args
-        prelabel_args = [
-            "--recording", args.recording,
-            "--batch-size", str(args.batch_size),
-            "--confidence-threshold", str(args.confidence_threshold),
-            "--model-root", args.model_root,
-        ]
-        sys.argv = ["lagent.train", "prelabel"] + prelabel_args
-        prelabel_command()
+        prelabel_command(args)
 
     elif args.subcommand == "ingest":
         from lagent.train.ingest import ingest_command

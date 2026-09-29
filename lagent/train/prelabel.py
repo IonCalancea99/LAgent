@@ -316,9 +316,9 @@ def run_prelabeling(
     return output_file
 
 
-def prelabel_command() -> None:
+def prelabel_command(args: argparse.Namespace | None = None) -> None:
     """Entry point for prelabel CLI subcommand."""
-    args = parse_prelabel_args()
+    parsed_args = args or parse_prelabel_args()
     
     logging.basicConfig(
         level=logging.INFO,
@@ -327,10 +327,10 @@ def prelabel_command() -> None:
     
     try:
         output_file = run_prelabeling(
-            args.recording,
-            batch_size=args.batch_size,
-            confidence_threshold=args.confidence_threshold,
-            model_root=args.model_root,
+            parsed_args.recording,
+            batch_size=parsed_args.batch_size,
+            confidence_threshold=parsed_args.confidence_threshold,
+            model_root=parsed_args.model_root,
         )
         print(f"✓ Prelabeling complete: {output_file}")
     except Exception as exc:

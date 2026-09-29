@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sys
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -18,6 +19,35 @@ class TestPrelabelingCLI:
         """Verify `python -m lagent.train prelabel` is recognized."""
         from lagent.train.prelabel import prelabel_command
         assert callable(prelabel_command)
+
+    def test_public_cli_dispatches_prelabel_arguments(self) -> None:
+        """The parent CLI must not forward the prelabel subcommand twice."""
+        from lagent.train.__main__ import main
+
+        cli_args = [
+            "lagent.train",
+            "prelabel",
+            "--recording",
+            "recordings/session-id",
+            "--batch-size",
+            "32",
+            "--confidence-threshold",
+            "0.5",
+            "--model-root",
+            "models",
+        ]
+        with patch.object(sys, "argv", cli_args), patch(
+            "lagent.train.prelabel.run_prelabeling",
+            return_value=Path("recordings/session-id/prelabeled.json"),
+        ) as mock_run:
+            main()
+
+        mock_run.assert_called_once_with(
+            Path("recordings/session-id"),
+            batch_size=32,
+            confidence_threshold=0.5,
+            model_root=Path("models"),
+        )
 
     def test_recording_argument_required(self) -> None:
         """Verify --recording argument is required."""

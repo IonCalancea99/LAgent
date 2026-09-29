@@ -206,6 +206,11 @@ label-studio start</code></pre>
     </div>
 
     <h2 id="label-studio-import">5. Import the recording frames</h2>
+    <p>Import the task file, not the images. Dragging a whole <code>frames/</code> directory into
+      the import dialog sends every image in a single upload request and fails once the batch
+      exceeds Django's file limits, reporting the misleading error
+      <code>You cannot access body after reading from request's data stream</code>. The task file
+      below avoids uploads entirely by pointing Label Studio at frames already on disk.</p>
     <p>Generate a Label Studio task file whose image URLs point to the recording directory. Run
       this from the repository root with LAgent's environment active, replacing the placeholder
       once:</p>
@@ -356,6 +361,7 @@ PY</code></pre>
       <thead><tr><th>Symptom</th><th>Likely cause</th><th>Action</th></tr></thead>
       <tbody>
         <tr><td>Images are blank in Label Studio</td><td>Local-file serving is disabled, the document root is wrong, or <code>?d=</code> points outside it</td><td>Restart Label Studio with the documented environment variables and regenerate the task file.</td></tr>
+        <tr><td><code>You cannot access body after reading from request's data stream</code> when importing many files</td><td>The bulk file upload exceeded Django's <code>DATA_UPLOAD_MAX_NUMBER_FILES</code> (default 100) or <code>DATA_UPLOAD_MAX_MEMORY_SIZE</code>. The parser aborts mid-stream and the error handler then fails trying to re-read the request body, hiding the real cause.</td><td>Do not upload frames. Import <code>label-studio-tasks.json</code> as described in step 5 so frames are served from disk. If you must upload, restart Label Studio with <code>DATA_UPLOAD_MAX_NUMBER_FILES</code> and <code>DATA_UPLOAD_MAX_MEMORY_SIZE</code> raised, or split the batch into fewer than 100 files.</td></tr>
         <tr><td>Import rejects <code>prelabeled.json</code></td><td>The current prelabel artifact is not standard Label Studio prediction JSON</td><td>Import <code>label-studio-tasks.json</code> and label manually; retain prelabels only as a reference.</td></tr>
         <tr><td><code>No rectangle annotations found</code></td><td>The wrong export format was used, tasks were not submitted, or the raw list was not normalized</td><td>Export raw JSON, run the normalization step, and confirm results have type <code>rectanglelabels</code>.</td></tr>
         <tr><td><code>Annotated frame not found</code></td><td><code>data.image</code> still contains a URL or uploaded-file name</td><td>Regenerate <code>labels.json</code> and confirm every image value is exactly a filename present under <code>frames/</code>.</td></tr>
